@@ -59,6 +59,7 @@ from app.ai.playback_engine import PlaybackEngine
 from app.ai.voice_assistant import VoiceAssistant
 from app.ai.camera_assistant import CameraAssistant
 from app.ai.jarvis_assistant import AstraAssistant
+from app.ai.version_detector import detect_version
 
 from data.db.ai_library_db import AILibraryDB
 from app.license.license_manager import LicenseManager
@@ -4502,6 +4503,7 @@ class MainWindow(ctk.CTk):
                 "camelot",
                 track.get("camelot", "")
             ),
+            "version_type": detect_version(track.get("name", "")),
         })
 
         if track.get("assistant_message"):

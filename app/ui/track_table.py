@@ -111,7 +111,11 @@ class TrackTable(ctk.CTkFrame):
 
                 "match",
 
-                "mix"
+                "mix",
+
+                "archive",
+
+                "version"
             ),
             show="headings",
             selectmode="browse"
@@ -138,6 +142,8 @@ class TrackTable(ctk.CTkFrame):
             "heart": "HEART",
             "match": "MATCH",
             "mix": "MIX",
+            "archive": "ARCHIVE",
+            "version": "VERSION",
         }
 
         for column, label in self.header_labels.items():
@@ -282,6 +288,22 @@ class TrackTable(ctk.CTkFrame):
             "mix",
             width=150,
             minwidth=120,
+            stretch=False,
+            anchor="center"
+        )
+
+        self.tree.column(
+            "archive",
+            width=110,
+            minwidth=100,
+            stretch=False,
+            anchor="center"
+        )
+
+        self.tree.column(
+            "version",
+            width=110,
+            minwidth=100,
             stretch=False,
             anchor="center"
         )
@@ -546,7 +568,11 @@ class TrackTable(ctk.CTkFrame):
 
                 match,
 
-                mix
+                mix,
+
+                track.get("archive_status", "-"),
+
+                track.get("version_type", "-")
             ),
             tags=(tag,)
         )
@@ -638,6 +664,8 @@ class TrackTable(ctk.CTkFrame):
             "match": track.get("compatibility_grade", ""),
             "ear": track.get("ai_ear_score", ""),
             "heart": track.get("heart_score", ""),
+            "archive": track.get("archive_status", ""),
+            "version": track.get("version_type", ""),
         }
 
         return str(value_map.get(column, "") or "").lower()
