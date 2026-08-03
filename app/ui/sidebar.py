@@ -116,6 +116,8 @@ class Sidebar(ctk.CTkFrame):
 
             ("Deck Studio", "deck_studio"),
 
+            ("DJ Booth", "dj_booth"),
+
             ("Remix Lab", "remix_lab"),
 
             ("Astra Chat", "astra_chat"),

@@ -22,6 +22,7 @@ from app.ui.waveform_view import WaveformView
 from app.ui.views.account_view import AccountView
 from app.ui.views.genre_review_view import GenreReviewView
 from app.ui.views.settings_view import SettingsView
+from app.ui.dj_booth_view import DJBoothView
 from app.ui.theme import *
 
 from app.core.audio_scanner import AudioScanner
@@ -303,6 +304,7 @@ class MainWindow(ctk.CTk):
             "<Control-Key-2>": lambda: self.load_selected_to_deck("B"),
             "<Control-m>": self.build_auto_mix_from_decks,
             "<F5>": self.refresh_current_view,
+            "<Control-b>": lambda: self.set_view("dj_booth"),
         }
 
         for key, command in shortcuts.items():
@@ -492,6 +494,7 @@ class MainWindow(ctk.CTk):
             "ai_memory": self.build_ai_memory_view,
             "account": self.build_account_view,
             "settings": self.build_settings_view,
+            "dj_booth": self.build_dj_booth_view,
         }
 
         builder = builders.get(view, self.build_dashboard)
@@ -2635,6 +2638,11 @@ class MainWindow(ctk.CTk):
         self.deck_status_label.configure(
             text=f"Deck A: {name_a} | Deck B: {name_b}"
         )
+
+    def build_dj_booth_view(self):
+
+        self.dj_booth = DJBoothView(self)
+        self.dj_booth.build(self.content)
 
     def build_remix_lab_view(self):
 
