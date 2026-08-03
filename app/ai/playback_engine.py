@@ -7,7 +7,12 @@ class PlaybackEngine:
 
     def __init__(self, callback=None):
 
-        pygame.mixer.init()
+        self.mixer_ok = False
+        try:
+            pygame.mixer.init()
+            self.mixer_ok = True
+        except Exception:
+            print("PLAYBACK: mixer init failed, playback disabled")
 
         self.callback = callback
         self.tracks = []
@@ -17,6 +22,10 @@ class PlaybackEngine:
     def play(self, tracks):
 
         if not tracks:
+            return
+
+        if not self.mixer_ok:
+            print("PLAYBACK: mixer not available, skipping")
             return
 
         self.tracks = tracks
@@ -51,9 +60,17 @@ class PlaybackEngine:
     def stop(self):
 
         self.playing = False
-        pygame.mixer.music.stop()
+        if self.mixer_ok:
+            try:
+                pygame.mixer.music.stop()
+            except Exception:
+                pass
 
     def next_track(self):
 
-        pygame.mixer.music.stop()
+        if self.mixer_ok:
+            try:
+                pygame.mixer.music.stop()
+            except Exception:
+                pass
         self.index += 1

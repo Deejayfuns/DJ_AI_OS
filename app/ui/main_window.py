@@ -4310,6 +4310,40 @@ class MainWindow(ctk.CTk):
         self.table.pack(fill="both", expand=True, padx=6, pady=6)
         self.populate_table(source)
 
+    def export_show_manifest(self):
+
+        source = self.current_set or self.library or self.saved_tracks
+        if not source:
+            self.set_status("DISA AKTARMA: Once set olustur veya kutuphane yukle.")
+            return
+
+        import json
+        os.makedirs("DJ_EXPORTS", exist_ok=True)
+        manifest_path = os.path.join("DJ_EXPORTS", "show_manifest.json")
+
+        manifest = {
+            "version": "1.0",
+            "generated_by": "DJ AI OS",
+            "track_count": len(source),
+            "tracks": [
+                {
+                    "name": t.get("name", ""),
+                    "bpm": t.get("bpm", 0),
+                    "key": t.get("camelot", t.get("key", "")),
+                    "genre": t.get("genre", ""),
+                    "energy": t.get("energy", 0),
+                    "role": t.get("role", ""),
+                    "version_type": t.get("version_type", ""),
+                }
+                for t in source
+            ],
+        }
+
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=False)
+
+        self.set_status(f"SHOW MANIFEST: {manifest_path}")
+
     def export_current_set_m3u(self):
 
         source = self.current_set or self.library or self.saved_tracks

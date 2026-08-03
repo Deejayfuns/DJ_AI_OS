@@ -50,6 +50,24 @@ VINYL_COLOR = "#1A1A2E"
 VINYL_GROOVE = "#252540"
 VINYL_LABEL = "#0D0D1A"
 
+
+def safe_alpha(hex_color, alpha_pct):
+    """Convert hex color + alpha to a valid tkinter hex color (no alpha channel).
+
+    tkinter doesn't support RGBA hex. This blends the color with BOOTH_BG
+    based on alpha_pct (0.0=fully transparent, 1.0=fully opaque).
+    """
+    try:
+        r1, g1, b1 = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+        r2, g2, b2 = int(BOOTH_BG[1:3], 16), int(BOOTH_BG[3:5], 16), int(BOOTH_BG[5:7], 16)
+        a = max(0, min(1, alpha_pct))
+        r = int(r1 * a + r2 * (1 - a))
+        g = int(g1 * a + g2 * (1 - a))
+        b = int(b1 * a + b2 * (1 - a))
+        return f"#{r:02x}{g:02x}{b:02x}"
+    except (ValueError, IndexError):
+        return hex_color
+
 # Camelot wheel colors (12 keys)
 CAMELOT_COLORS = [
     "#00FFA3", "#22D3FF", "#9B5CFF", "#FF3DF2",
@@ -113,7 +131,7 @@ class SpinningVinyl(ctk.CTkFrame):
             c.create_oval(
                 cx - r - i * 3, cy - r - i * 3,
                 cx + r + i * 3, cy + r + i * 3,
-                outline=ACCENT + "15",
+                outline=safe_alpha(ACCENT, 0.08),
                 width=1,
             )
 
@@ -142,7 +160,7 @@ class SpinningVinyl(ctk.CTkFrame):
         c.create_oval(
             highlight_x - glow_r, highlight_y - glow_r,
             highlight_x + glow_r, highlight_y + glow_r,
-            fill=ACCENT + "20",
+            fill=safe_alpha(ACCENT, 0.12),
             outline="",
         )
 
@@ -318,11 +336,11 @@ class EnergyOrb(ctk.CTkFrame):
             alpha_val = max(10, 40 - ring * 12)
             # Color based on energy
             if self._energy > 0.7:
-                ring_color = f"#FF3DF2{alpha_val:02x}"
+                ring_color = safe_alpha("#FF3DF2", alpha_val / 100)
             elif self._energy > 0.4:
-                ring_color = f"#9B5CFF{alpha_val:02x}"
+                ring_color = safe_alpha("#9B5CFF", alpha_val / 100)
             else:
-                ring_color = f"#22D3FF{alpha_val:02x}"
+                ring_color = safe_alpha("#22D3FF", alpha_val / 100)
 
             c.create_oval(
                 cx - ring_r, cy - ring_r,
@@ -488,9 +506,9 @@ class HarmonicWheel(ctk.CTkFrame):
             is_deck_b = key == self._deck_b_key
 
             if is_selected:
-                fill_color = ACCENT + "40"
+                fill_color = safe_alpha(ACCENT, 0.25)
             elif is_compatible:
-                fill_color = CAMELOT_COLORS[color_idx] + "20"
+                fill_color = safe_alpha(CAMELOT_COLORS[color_idx], 0.12)
             else:
                 fill_color = BOOTH_BG
 
@@ -499,7 +517,7 @@ class HarmonicWheel(ctk.CTkFrame):
                 cx - r, cy - r, cx + r, cy + r,
                 start=start_angle, extent=30,
                 fill=fill_color,
-                outline=CAMELOT_COLORS[color_idx] + "30",
+                outline=safe_alpha(CAMELOT_COLORS[color_idx], 0.19),
                 width=1,
             )
 

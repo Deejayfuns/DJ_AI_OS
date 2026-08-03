@@ -43,6 +43,20 @@ from app.ui.theme import (
 )
 
 
+def safe_alpha(hex_color, alpha_pct):
+    """Convert hex color + alpha to a valid tkinter hex color (no alpha channel)."""
+    try:
+        r1, g1, b1 = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+        r2, g2, b2 = int(BACKGROUND[1:3], 16), int(BACKGROUND[3:5], 16), int(BACKGROUND[5:7], 16)
+        a = max(0, min(1, alpha_pct))
+        r = int(r1 * a + r2 * (1 - a))
+        g = int(g1 * a + g2 * (1 - a))
+        b = int(b1 * a + b2 * (1 - a))
+        return f"#{r:02x}{g:02x}{b:02x}"
+    except (ValueError, IndexError):
+        return hex_color
+
+
 # ============================================================
 # Canvas glow / gradient drawing helpers
 # ============================================================
@@ -185,7 +199,7 @@ class GlowDot(ctk.CTkFrame):
         # outer glow
         r = mid * pulse
         c.create_oval(mid - r - 2, mid - r - 2, mid + r + 2, mid + r + 2,
-                       outline=self._color + "40", width=1)
+                       outline=safe_alpha(self._color, 0.25), width=1)
         # solid core
         c.create_oval(mid - 3, mid - 3, mid + 3, mid + 3,
                        fill=self._color, outline="")
