@@ -122,6 +122,8 @@ class Sidebar(ctk.CTkFrame):
 
             ("Library Map", "library_map"),
 
+            ("Smart Set", "smart_set"),
+
             ("Remix Lab", "remix_lab"),
 
             ("Astra Chat", "astra_chat"),

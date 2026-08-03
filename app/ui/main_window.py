@@ -65,6 +65,9 @@ from app.ai.emergency_crate import EmergencyCrate
 from app.ai.track_dna import generate_dna, dna_to_string
 from app.ai.dj_coach import DJCoach
 from app.ui.library_map import LibraryMap
+from app.ai.set_recorder import SetRecorder
+from app.ai.smart_playlist import SmartPlaylistGenerator
+from app.ui.beat_grid_view import BeatGridView
 
 from data.db.ai_library_db import AILibraryDB
 from app.license.license_manager import LicenseManager
@@ -127,6 +130,8 @@ class MainWindow(ctk.CTk):
         self.feedback_learner = FeedbackLearner()
         self.emergency_crate = EmergencyCrate()
         self.dj_coach = DJCoach()
+        self.set_recorder = SetRecorder()
+        self.smart_playlist = SmartPlaylistGenerator()
         self.genre_review = GenreReviewStudio()
 
         # ================= DB =================
@@ -503,6 +508,7 @@ class MainWindow(ctk.CTk):
             "dj_booth": self.build_dj_booth_view,
             "dj_coach": self.build_dj_coach_view,
             "library_map": self.build_library_map_view,
+            "smart_set": self.build_smart_set_view,
         }
 
         builder = builders.get(view, self.build_dashboard)
@@ -2775,6 +2781,149 @@ class MainWindow(ctk.CTk):
         self.library_map = LibraryMap(self.content, width=850, height=480)
         self.library_map.pack(fill="both", expand=True, pady=(0, 10))
         self.library_map.set_tracks(source)
+
+    def build_smart_set_view(self):
+
+        self.make_section_title(
+            self.content,
+            "Smart Set Generator",
+            "Mekan tipine gore enerji egrisi ile otomatik set olustur."
+        )
+
+        controls = ctk.CTkFrame(self.content, fg_color=CARD, corner_radius=8)
+        controls.pack(fill="x", pady=(0, 10))
+
+        self.smart_venue = StringVar(value="CLUB")
+        self.smart_hours = StringVar(value="4")
+
+        ctk.CTkComboBox(
+            controls,
+            variable=self.smart_venue,
+            values=["CLUB", "WEDDING", "FESTIVAL", "LOUNGE"],
+            width=140
+        ).pack(side="left", padx=12, pady=12)
+
+        ctk.CTkEntry(
+            controls,
+            variable=self.smart_hours,
+            placeholder_text="Hours",
+            width=80
+        ).pack(side="left", padx=6, pady=12)
+
+        ctk.CTkButton(
+            controls,
+            text="SMART SET OLUSTUR",
+            command=self.generate_smart_set
+        ).pack(side="left", padx=6, pady=12)
+
+        ctk.CTkButton(
+            controls,
+            text="SET KAYDINI BASLAT",
+            command=self.start_set_recording,
+            fg_color="#00C896"
+        ).pack(side="right", padx=6, pady=12)
+
+        ctk.CTkButton(
+            controls,
+            text="KAYDI DURDUR",
+            command=self.stop_set_recording,
+            fg_color="#FF4D6D"
+        ).pack(side="right", padx=6, pady=12)
+
+        self.smart_result = ctk.CTkScrollableFrame(
+            self.content, fg_color=PANEL, corner_radius=8
+        )
+        self.smart_result.pack(fill="both", expand=True, pady=(0, 10))
+
+        ctk.CTkLabel(
+            self.smart_result,
+            text="Mekan tipi ve sure sec, SMART SET OLUSTUR'a bas.",
+            text_color=MUTED
+        ).pack(anchor="w", padx=12, pady=12)
+
+    def generate_smart_set(self):
+
+        source = self.library or self.saved_tracks
+        venue = self.smart_venue.get()
+        hours = float(self.smart_hours.get() or 4)
+
+        result = self.smart_playlist.generate(source, venue, hours)
+
+        for child in self.smart_result.winfo_children():
+            child.destroy()
+
+        # Stats
+        stats = result.get("stats", {})
+        ctk.CTkLabel(
+            self.smart_result,
+            text=f"{result['template']} | {result['total_tracks']} parca | "
+                 f"Ort. enerji: {stats.get('avg_energy', 0)} | "
+                 f"Ort. BPM: {stats.get('avg_bpm', 0)} | "
+                 f"Tur cesitliligi: {stats.get('genre_diversity', 0)}",
+            font=F_BODY_BOLD,
+            text_color=ACCENT,
+            wraplength=1000,
+            justify="left"
+        ).pack(anchor="w", padx=12, pady=(12, 8))
+
+        # Phases
+        for phase in result.get("phases", []):
+            phase_frame = ctk.CTkFrame(self.smart_result, fg_color=CARD, corner_radius=8)
+            phase_frame.pack(fill="x", padx=12, pady=4)
+
+            ctk.CTkLabel(
+                phase_frame,
+                text=f"{phase['name']} ({phase['track_count']} parca) | Enerji: {phase['target_energy']}",
+                font=F_BODY_BOLD,
+                text_color=NEON_BLUE
+            ).pack(anchor="w", padx=12, pady=(8, 2))
+
+            ctk.CTkLabel(
+                phase_frame,
+                text=phase.get("instruction", ""),
+                text_color=TEXT,
+                wraplength=950,
+                justify="left"
+            ).pack(anchor="w", padx=12, pady=(0, 4))
+
+            # Show first few tracks
+            for track in phase.get("tracks", [])[:5]:
+                ctk.CTkLabel(
+                    phase_frame,
+                    text=f"  - {track.get('name', '?')[:50]} | "
+                         f"{track.get('bpm', '?')} BPM | E:{track.get('energy', 0):.2f} | "
+                         f"{track.get('role', '?')}",
+                    text_color=MUTED,
+                    wraplength=950,
+                    justify="left"
+                ).pack(anchor="w", padx=18, pady=1)
+
+            if phase["track_count"] > 5:
+                ctk.CTkLabel(
+                    phase_frame,
+                    text=f"  ... +{phase['track_count'] - 5} parca daha",
+                    text_color=MUTED
+                ).pack(anchor="w", padx=18, pady=1)
+
+        # Set as current
+        all_tracks = []
+        for phase in result.get("phases", []):
+            all_tracks.extend(phase.get("tracks", []))
+        self.current_set = all_tracks
+
+    def start_set_recording(self):
+        venue = self.smart_venue.get()
+        style = "AFRO HOUSE"
+        self.set_recorder.start_recording(venue=venue, style=style)
+        self.set_status(f"SET KAYDI BASLADI: {venue}")
+
+    def stop_set_recording(self):
+        result = self.set_recorder.stop_recording()
+        summary = self.set_recorder.get_session_summary()
+        self.set_status(
+            f"SET KAYDI DURDURULDU: {summary.get('tracks_played', 0)} parca, "
+            f"{summary.get('duration_minutes', 0)} dakika"
+        )
 
     def build_remix_lab_view(self):
 

@@ -2,6 +2,7 @@ import os
 
 from app.ai.club_intelligence import ClubIntelligence
 from app.ai.genre_knowledge_base import GenreKnowledgeBase
+from app.ai.mfcc_classifier import MFCCClassifier
 
 
 class MusicAI:
@@ -10,6 +11,8 @@ class MusicAI:
 
         self.genres = GenreKnowledgeBase()
         self.club = ClubIntelligence()
+        self.ml_classifier = MFCCClassifier()
+        self.ml_classifier.load()  # Try loading pre-trained model
 
     def clean_tracks(self, raw):
 
@@ -81,6 +84,15 @@ class MusicAI:
         })
 
         genre = genre_result["genre"]
+
+        # Try ML classifier for higher confidence
+        audio_features = base_track.get("_audio_features")
+        if audio_features and self.ml_classifier.is_available():
+            ml_result = self.ml_classifier.predict(audio_features)
+            if ml_result and ml_result.get("confidence", 0) > 0.6:
+                genre = ml_result["genre"]
+                genre_result["confidence"] = ml_result["confidence"]
+                genre_result["classification_source"] = "MFCC_ML"
 
         mood = "neutral"
 
