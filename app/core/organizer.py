@@ -1,13 +1,18 @@
 import os
+import json
 import shutil
 import hashlib
+import time
 
 
 class Organizer:
 
+    CACHE_FILE = ".fingerprint_cache.json"
+
     def __init__(self, output_folder):
         self.output_folder = output_folder
         self._fingerprint_index = None
+        self._cache_loaded = False
 
     def sanitize(self, text):
         invalid = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
@@ -108,10 +113,13 @@ class Organizer:
 
     def build_fingerprint_index(self):
 
-        index = {}
+        # Try loading from cache first
+        index = self.load_fingerprint_cache()
 
         if not os.path.exists(self.output_folder):
             return index
+
+        existing_paths = set(index.values())
 
         for current, _dirs, files in os.walk(self.output_folder):
             for filename in files:
@@ -120,12 +128,61 @@ class Organizer:
                 if not self.is_audio_file(path):
                     continue
 
+                abs_path = os.path.abspath(path)
+
+                # Skip if already cached and file hasn't changed
+                if abs_path in existing_paths:
+                    continue
+
                 fingerprint = self.file_fingerprint(path)
 
                 if fingerprint:
-                    index.setdefault(fingerprint, os.path.abspath(path))
+                    index[fingerprint] = abs_path
+
+        # Save updated cache
+        self.save_fingerprint_cache(index)
 
         return index
+
+    def load_fingerprint_cache(self):
+        """Load fingerprint index from disk cache."""
+        cache_path = self.cache_path()
+
+        if not os.path.exists(cache_path):
+            return {}
+
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+
+            # Validate: filter out paths that no longer exist
+            valid = {
+                fp: path
+                for fp, path in cached.items()
+                if os.path.exists(path)
+            }
+
+            self._cache_loaded = True
+            return valid
+
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    def save_fingerprint_cache(self, index):
+        """Save fingerprint index to disk cache."""
+        try:
+            cache_path = self.cache_path()
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(index, f, indent=None, ensure_ascii=False)
+
+        except OSError:
+            pass  # Non-critical; cache is optional
+
+    def cache_path(self):
+        """Return the fingerprint cache file path."""
+        return os.path.join(self.output_folder, self.CACHE_FILE)
 
     def register_fingerprint(self, fingerprint, path):
 
@@ -163,10 +220,17 @@ class Organizer:
 
         try:
             with open(path, "rb") as handle:
-                self.hash_sample(handle, digest, 0)
-
-                if size > 2 * 1024 * 1024:
+                if size <= 2 * 1024 * 1024:
+                    # Small file: hash everything
+                    digest.update(handle.read())
+                elif size <= 50 * 1024 * 1024:
+                    # Medium file: first 1MB + middle 1MB + last 1MB
+                    self.hash_sample(handle, digest, 0)
                     self.hash_sample(handle, digest, max(0, size // 2))
+                    self.hash_sample(handle, digest, max(0, size - 1024 * 1024))
+                else:
+                    # Large file (50MB+): first 1MB + last 1MB (skip middle)
+                    self.hash_sample(handle, digest, 0)
                     self.hash_sample(handle, digest, max(0, size - 1024 * 1024))
         except OSError:
             return ""

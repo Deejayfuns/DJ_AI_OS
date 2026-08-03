@@ -99,12 +99,14 @@ class AILibraryDB:
                 heart_score REAL,
                 emotional_color TEXT,
                 crowd_moment TEXT,
-                heart_advice TEXT
+                heart_advice TEXT,
+                version_type TEXT
 
             )
             """)
 
             self.migrate_tracks_table()
+            self.create_indexes()
             self.conn.commit()
 
     def migrate_tracks_table(self):
@@ -167,7 +169,8 @@ class AILibraryDB:
             "heart_score": "REAL",
             "emotional_color": "TEXT",
             "crowd_moment": "TEXT",
-            "heart_advice": "TEXT"
+            "heart_advice": "TEXT",
+            "version_type": "TEXT",
         }
 
         for column, column_type in migrations.items():
@@ -175,6 +178,28 @@ class AILibraryDB:
                 self.cursor.execute(
                     f"ALTER TABLE tracks ADD COLUMN {column} {column_type}"
                 )
+
+    def create_indexes(self):
+
+        try:
+            self.cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_content_fingerprint "
+                "ON tracks(content_fingerprint)"
+            )
+            self.cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_archive_status "
+                "ON tracks(archive_status)"
+            )
+            self.cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_version_type "
+                "ON tracks(version_type)"
+            )
+            self.cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_genre "
+                "ON tracks(genre)"
+            )
+        except Exception:
+            pass  # Index creation is best-effort
 
     # =====================================================
     # SAVE TRACK (UPSERT SAFE)
@@ -204,8 +229,9 @@ class AILibraryDB:
                 intro_outro_mixability, arrangement_score,
                 crowd_energy_role, ai_ear_summary, phrase_points,
                 bpm_original, bpm_correction, tempo_confidence, tempo_warning,
-                heart_score, emotional_color, crowd_moment, heart_advice
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                heart_score, emotional_color, crowd_moment, heart_advice,
+                version_type
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
 
                 track.get("id"),
@@ -276,7 +302,8 @@ class AILibraryDB:
                 float(track.get("heart_score", 0) or 0),
                 track.get("emotional_color", ""),
                 track.get("crowd_moment", ""),
-                track.get("heart_advice", "")
+                track.get("heart_advice", ""),
+                track.get("version_type", "")
 
             ))
 
@@ -291,6 +318,116 @@ class AILibraryDB:
             return json.dumps(value)
         except Exception:
             return "[]"
+
+    # =====================================================
+    # BATCH SAVE (multiple tracks, single commit)
+    # =====================================================
+    def save_many_tracks(self, tracks):
+
+        if not tracks:
+            return
+
+        with self.lock:
+            for track in tracks:
+                self._save_track_unsafe(track)
+
+            self.conn.commit()
+
+    def _save_track_unsafe(self, track):
+        """Insert/replace a track without acquiring the lock (for batch use)."""
+
+        self.cursor.execute("""
+        INSERT OR REPLACE INTO tracks (
+            id, name, path, artist, duration,
+            bpm, key, camelot,
+            genre, parent_genre, subgenre,
+            mood, role, quality, confidence,
+            discovery_status, matched_signals, assistant_message,
+            suggested_filename, identity_key, duplicate_status,
+            duplicate_confidence, duplicate_match,
+            recommended_duplicate_action, doctor_message,
+            research_status, research_query, research_links,
+            research_message, artwork_status, album_art_url,
+            album_art_path, hit_status, release_year, label,
+            external_metadata, archived_path, content_fingerprint, archive_status,
+            energy, brightness, roughness, danceability, drop_strength,
+            waveform, analysis_status, analysis_error,
+            bitrate, file_size,
+            ai_ear_score, rhythmic_density, vocal_risk,
+            intro_outro_mixability, arrangement_score,
+            crowd_energy_role, ai_ear_summary, phrase_points,
+            bpm_original, bpm_correction, tempo_confidence, tempo_warning,
+            heart_score, emotional_color, crowd_moment, heart_advice,
+            version_type
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            track.get("id"),
+            track.get("name"),
+            track.get("path", track.get("id")),
+            track.get("artist", "UNKNOWN"),
+            int(track.get("duration", 0) or 0),
+            float(track.get("bpm", 0) or 0),
+            track.get("key", ""),
+            track.get("camelot", track.get("key", "")),
+            track.get("genre", ""),
+            track.get("parent_genre", ""),
+            track.get("subgenre", ""),
+            track.get("mood", ""),
+            track.get("role", ""),
+            track.get("quality", ""),
+            float(track.get("confidence", 0) or 0),
+            track.get("discovery_status", ""),
+            self.serialize_json(track.get("matched_signals", [])),
+            track.get("assistant_message", ""),
+            track.get("suggested_filename", ""),
+            track.get("identity_key", ""),
+            track.get("duplicate_status", ""),
+            float(track.get("duplicate_confidence", 0) or 0),
+            self.serialize_json(track.get("duplicate_match", {})),
+            track.get("recommended_duplicate_action", ""),
+            track.get("doctor_message", ""),
+            track.get("research_status", ""),
+            track.get("research_query", ""),
+            self.serialize_json(track.get("research_links", {})),
+            track.get("research_message", ""),
+            track.get("artwork_status", ""),
+            track.get("album_art_url", ""),
+            track.get("album_art_path", ""),
+            track.get("hit_status", ""),
+            track.get("release_year", ""),
+            track.get("label", ""),
+            self.serialize_json(track.get("external_metadata", {})),
+            track.get("archived_path", ""),
+            track.get("content_fingerprint", ""),
+            track.get("archive_status", ""),
+            float(track.get("energy", 0) or 0),
+            float(track.get("brightness", 0) or 0),
+            float(track.get("roughness", 0) or 0),
+            float(track.get("danceability", 0) or 0),
+            float(track.get("drop_strength", 0) or 0),
+            self.serialize_json(track.get("waveform", [])[:1024]),
+            track.get("analysis_status", ""),
+            track.get("analysis_error", ""),
+            int(track.get("bitrate", 0) or 0),
+            int(track.get("file_size", 0) or 0),
+            float(track.get("ai_ear_score", 0) or 0),
+            float(track.get("rhythmic_density", 0) or 0),
+            float(track.get("vocal_risk", 0) or 0),
+            float(track.get("intro_outro_mixability", 0) or 0),
+            float(track.get("arrangement_score", 0) or 0),
+            track.get("crowd_energy_role", ""),
+            track.get("ai_ear_summary", ""),
+            self.serialize_json(track.get("phrase_points", [])),
+            float(track.get("bpm_original", track.get("bpm", 0)) or 0),
+            track.get("bpm_correction", ""),
+            float(track.get("tempo_confidence", 0) or 0),
+            track.get("tempo_warning", ""),
+            float(track.get("heart_score", 0) or 0),
+            track.get("emotional_color", ""),
+            track.get("crowd_moment", ""),
+            track.get("heart_advice", ""),
+            track.get("version_type", "")
+        ))
 
     # =====================================================
     # LOAD ALL (DICT FIXED)

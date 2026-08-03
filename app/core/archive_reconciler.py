@@ -215,3 +215,176 @@ class ArchiveReconciler:
             json.dump(manifest, handle, indent=2, ensure_ascii=False)
 
         return path
+
+    # =====================================================
+    # QUARANTINE EXECUTION (real move, no delete)
+    # =====================================================
+
+    def execute_quarantine(
+        self,
+        manifest,
+        dry_run=True,
+        quarantine_folder=None,
+    ):
+        """Move duplicate files to quarantine folder.
+
+        Args:
+            manifest: dict from quarantine_manifest()
+            dry_run: if True, only report what would happen
+            quarantine_folder: override quarantine target dir
+
+        Returns:
+            dict with actions_taken / actions_planned + log_path
+        """
+        qfolder = quarantine_folder or manifest.get(
+            "quarantine_folder",
+            os.path.join(self.archive_root, "DJ_EXPORTS", "QUARANTINE"),
+        )
+
+        actions = []
+
+        for operation in manifest.get("operations", []):
+            source = operation.get("source")
+            target = operation.get("target")
+
+            if not source or not os.path.exists(source):
+                actions.append({
+                    "source": source,
+                    "action": "SKIPPED",
+                    "reason": "SOURCE_NOT_FOUND",
+                })
+                continue
+
+            target = target or os.path.join(
+                qfolder, os.path.basename(source)
+            )
+
+            if os.path.abspath(source) == os.path.abspath(target):
+                actions.append({
+                    "source": source,
+                    "action": "SKIPPED",
+                    "reason": "SOURCE_EQUALS_TARGET",
+                })
+                continue
+
+            if dry_run:
+                actions.append({
+                    "source": source,
+                    "target": target,
+                    "action": "WOULD_MOVE",
+                })
+                continue
+
+            try:
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                shutil.move(source, target)
+                actions.append({
+                    "source": source,
+                    "target": target,
+                    "action": "MOVED",
+                })
+            except OSError as exc:
+                actions.append({
+                    "source": source,
+                    "action": "ERROR",
+                    "reason": str(exc),
+                })
+
+        result = {
+            "dry_run": dry_run,
+            "total_operations": len(manifest.get("operations", [])),
+            "actions": actions,
+            "moved_count": sum(
+                1 for a in actions if a.get("action") == "MOVED"
+            ),
+        }
+
+        if not dry_run and actions:
+            log_path = self._write_quarantine_log(actions, qfolder)
+            result["log_path"] = log_path
+
+        return result
+
+    def restore_from_quarantine(
+        self,
+        log_path,
+        dry_run=True,
+    ):
+        """Restore files from quarantine back to their original paths.
+
+        Args:
+            log_path: path to quarantine_log.json
+            dry_run: if True, only report what would happen
+
+        Returns:
+            dict with actions
+        """
+        if not os.path.exists(log_path):
+            return {"error": "LOG_NOT_FOUND", "path": log_path}
+
+        with open(log_path, "r", encoding="utf-8") as f:
+            log = json.load(f)
+
+        actions = []
+
+        for entry in log.get("actions", []):
+            if entry.get("action") != "MOVED":
+                continue
+
+            source = entry.get("target")  # quarantine path
+            target = entry.get("source")  # original path
+
+            if not source or not os.path.exists(source):
+                actions.append({
+                    "source": source,
+                    "action": "SKIPPED",
+                    "reason": "QUARANTINE_FILE_NOT_FOUND",
+                })
+                continue
+
+            if dry_run:
+                actions.append({
+                    "source": source,
+                    "target": target,
+                    "action": "WOULD_RESTORE",
+                })
+                continue
+
+            try:
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                shutil.move(source, target)
+                actions.append({
+                    "source": source,
+                    "target": target,
+                    "action": "RESTORED",
+                })
+            except OSError as exc:
+                actions.append({
+                    "source": source,
+                    "action": "ERROR",
+                    "reason": str(exc),
+                })
+
+        return {
+            "dry_run": dry_run,
+            "actions": actions,
+            "restored_count": sum(
+                1 for a in actions if a.get("action") == "RESTORED"
+            ),
+        }
+
+    def _write_quarantine_log(self, actions, quarantine_folder):
+        """Write a quarantine log for later restore."""
+        log = {
+            "archive_root": os.path.abspath(self.archive_root),
+            "quarantine_folder": os.path.abspath(quarantine_folder),
+            "actions": actions,
+        }
+
+        os.makedirs(quarantine_folder, exist_ok=True)
+        path = os.path.join(quarantine_folder, "quarantine_log.json")
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(log, f, indent=2, ensure_ascii=False)
+
+        return os.path.abspath(path)
