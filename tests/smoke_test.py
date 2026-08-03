@@ -1346,6 +1346,168 @@ def test_server_cloud_download_requires_entitlement():
     assert allowed["download"]["signed_url"]
 
 
+# ============================================================
+# NEW MODULE TESTS
+# ============================================================
+
+def test_version_detector_basic():
+    from app.ai.version_detector import detect_version
+    assert detect_version("Song (Extended Mix).mp3") == "EXTENDED"
+    assert detect_version("Track (Radio Edit).mp3") == "RADIO_EDIT"
+    assert detect_version("Vocal Rework.flac") == "REMIK"
+    assert detect_version("Original Mix.wav") == "ORIGINAL"
+    assert detect_version("Acapella Version.mp3") == "ACAPELLA"
+
+
+def test_version_detector_same_song_family():
+    from app.ai.version_detector import are_same_song_version
+    assert are_same_song_version("ORIGINAL", "EXTENDED") is True
+    assert are_same_song_version("ORIGINAL", "RADIO_EDIT") is True
+    assert are_same_song_version("ORIGINAL", "REMIK") is False
+    assert are_same_song_version("REMIK", "ACAPELLA") is False
+
+
+def test_emergency_crate_finds_rescue_tracks():
+    from app.ai.emergency_crate import EmergencyCrate
+    crate = EmergencyCrate()
+    library = [
+        {"id": "1", "name": "Peak Track", "genre": "AFRO HOUSE", "role": "PEAK TIME", "energy": 0.9, "camelot": "8A"},
+        {"id": "2", "name": "Warm Track", "genre": "HOUSE", "role": "WARMUP", "energy": 0.3, "camelot": "8A"},
+        {"id": "3", "name": "Groove Track", "genre": "TECH HOUSE", "role": "GROOVE", "energy": 0.65, "camelot": "9A"},
+    ]
+    current = {"id": "2", "energy": 0.3, "camelot": "8A"}
+    rescue = crate.find_rescue_tracks(library, current, limit=3)
+    assert len(rescue) > 0
+    assert rescue[0].get("rescue_score", 0) > 0
+
+
+def test_emergency_crate_assesses_set_health():
+    from app.ai.emergency_crate import EmergencyCrate
+    crate = EmergencyCrate()
+    tracks = [
+        {"bpm": 124, "energy": 0.5, "camelot": "8A"},
+        {"bpm": 124, "energy": 0.5, "camelot": "8A"},
+        {"bpm": 124, "energy": 0.5, "camelot": "8A"},
+        {"bpm": 124, "energy": 0.5, "camelot": "8A"},
+        {"bpm": 124, "energy": 0.5, "camelot": "8A"},
+    ]
+    result = crate.assess_set_health(tracks)
+    assert "health_score" in result
+    assert result["health_score"] >= 0
+
+
+def test_dj_coach_analyzes_set():
+    from app.ai.dj_coach import DJCoach
+    coach = DJCoach()
+    tracks = [
+        {"bpm": 120, "energy": 0.4, "role": "WARMUP", "camelot": "8A", "genre": "HOUSE"},
+        {"bpm": 124, "energy": 0.6, "role": "GROOVE", "camelot": "8A", "genre": "HOUSE"},
+        {"bpm": 126, "energy": 0.8, "role": "PEAK TIME", "camelot": "9A", "genre": "HOUSE"},
+        {"bpm": 128, "energy": 0.9, "role": "PEAK TIME", "camelot": "9A", "genre": "TECH HOUSE"},
+        {"bpm": 124, "energy": 0.5, "role": "WARMUP", "camelot": "8A", "genre": "HOUSE"},
+    ]
+    result = coach.analyze_set(tracks, "CLUB")
+    assert result["grade"] in ("S", "A", "B", "C", "D")
+    assert "scores" in result
+    assert "coaching" in result
+
+
+def test_track_dna_generates_barcode():
+    from app.ai.track_dna import generate_dna, dna_to_string
+    track = {"energy": 0.8, "brightness": 0.6, "danceability": 0.7, "vocal_risk": 0.2, "drop_strength": 0.4, "heart_score": 0.7, "roughness": 0.3}
+    dna = generate_dna(track)
+    assert len(dna) > 0
+    dna_str = dna_to_string(dna)
+    assert "|" in dna_str
+
+
+def test_track_similarity_finds_similar():
+    from app.ai.track_similarity import TrackSimilarityEngine
+    engine = TrackSimilarityEngine()
+    target = {"id": "1", "name": "Track A", "bpm": 124, "energy": 0.7, "brightness": 0.5, "genre": "HOUSE", "camelot": "8A", "role": "GROOVE"}
+    library = [
+        {"id": "2", "name": "Track B", "bpm": 126, "energy": 0.72, "brightness": 0.48, "genre": "HOUSE", "camelot": "8A", "role": "GROOVE"},
+        {"id": "3", "name": "Track C", "bpm": 140, "energy": 0.95, "brightness": 0.8, "genre": "TECHNO", "camelot": "12B", "role": "PEAK TIME"},
+    ]
+    similar = engine.find_similar(target, library, limit=2)
+    assert len(similar) > 0
+    assert similar[0]["similarity_score"] > 0
+
+
+def test_dj_profile_builds_from_tracks():
+    from app.ai.dj_profile import DJProfile
+    profile = DJProfile()
+    tracks = [
+        {"genre": "HOUSE", "energy": 0.7, "bpm": 124, "camelot": "8A", "role": "GROOVE", "ai_ear_score": 0.8},
+        {"genre": "TECHNO", "energy": 0.9, "bpm": 135, "camelot": "12B", "role": "PEAK TIME", "ai_ear_score": 0.7},
+        {"genre": "HOUSE", "energy": 0.5, "bpm": 120, "camelot": "8A", "role": "WARMUP", "ai_ear_score": 0.6},
+    ]
+    result = profile.build_profile(tracks)
+    assert result["track_count"] == 3
+    assert "dna" in result
+    assert "insights" in result
+    assert len(result["top_genres"]) > 0
+
+
+def test_smart_playlist_generates_wedding():
+    from app.ai.smart_playlist import SmartPlaylistGenerator
+    gen = SmartPlaylistGenerator()
+    library = [
+        {"id": str(i), "genre": "HOUSE", "parent_genre": "HOUSE", "energy": 0.3 + i * 0.08, "bpm": 120 + i, "role": ["OPENING", "WARMUP", "GROOVE", "PEAK TIME"][i % 4], "ai_ear_score": 0.7}
+        for i in range(20)
+    ]
+    result = gen.generate(library, "WEDDING", hours=2)
+    assert result["venue"] == "WEDDING"
+    assert result["total_tracks"] > 0
+    assert len(result["phases"]) > 0
+
+
+def test_smart_playlist_generates_club():
+    from app.ai.smart_playlist import SmartPlaylistGenerator
+    gen = SmartPlaylistGenerator()
+    library = [
+        {"id": str(i), "genre": "TECH HOUSE", "parent_genre": "HOUSE", "energy": 0.4 + i * 0.05, "bpm": 124 + i, "role": ["WARMUP", "GROOVE", "PEAK TIME"][i % 3], "ai_ear_score": 0.7}
+        for i in range(30)
+    ]
+    result = gen.generate(library, "CLUB", hours=3)
+    assert result["venue"] == "CLUB"
+    assert result["total_tracks"] > 0
+
+
+def test_set_recorder_records_session():
+    from app.ai.set_recorder import SetRecorder
+    recorder = SetRecorder()
+    recorder.start_recording("CLUB")
+    assert recorder.recording is True
+    recorder.record_track_start({"id": "1", "name": "Track 1", "bpm": 124, "energy": 0.7})
+    recorder.record_track_end()
+    recorder.record_skip({"id": "2", "name": "Track 2"}, reason="wrong genre")
+    summary = recorder.get_session_summary()
+    assert summary["tracks_played"] == 1
+    assert summary["tracks_skipped"] == 1
+    result = recorder.stop_recording()
+    assert result["total_tracks"] == 1
+
+
+def test_mfcc_classifier_fallback():
+    from app.ai.mfcc_classifier import MFCCClassifier
+    clf = MFCCClassifier()
+    assert clf.is_available() is False  # No model trained yet
+    result = clf.predict({"energy": 0.7, "brightness": 0.5, "mfcc": [0.1] * 13})
+    assert result is None  # Returns None when no model
+
+
+def test_deck_engine_bpm_match_report():
+    from app.ai.deck_engine import DeckEngine
+    engine = DeckEngine()
+    engine.load("A", {"bpm": 124, "energy": 0.7, "camelot": "8A"})
+    engine.load("B", {"bpm": 126, "energy": 0.65, "camelot": "8A"})
+    report = engine.bpm_match_report()
+    assert report["matched"] is True
+    assert report["diff"] == 2.0
+    assert report["harmonic_match"] is True
+
+
 if __name__ == "__main__":
     test_music_ai_classifies_track()
     test_music_ai_classifies_wedding_archive_tracks()
@@ -1394,4 +1556,19 @@ if __name__ == "__main__":
     test_server_license_activation_and_entitlements()
     test_server_billing_checkout_and_webhook_contract()
     test_server_cloud_download_requires_entitlement()
+    test_version_detector_basic()
+    test_version_detector_same_song_family()
+    test_emergency_crate_finds_rescue_tracks()
+    test_emergency_crate_assesses_set_health()
+    test_dj_coach_analyzes_set()
+    test_track_dna_generates_barcode()
+    test_track_similarity_finds_similar()
+    test_dj_profile_builds_from_tracks()
+    test_smart_playlist_generates_wedding()
+    test_smart_playlist_generates_club()
+    test_set_recorder_records_session()
+    test_mfcc_classifier_fallback()
+    test_deck_engine_bpm_match_report()
     print("smoke tests passed")
+
+

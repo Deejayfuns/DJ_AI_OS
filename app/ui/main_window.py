@@ -464,6 +464,41 @@ class MainWindow(ctk.CTk):
                 "keywords": "refresh reload",
                 "action": self.refresh_current_view,
             },
+            {
+                "title": "DJ Booth",
+                "subtitle": "Gelecekten gelmis DJ kabini — vinyl, BPM scope, harmonik cark.",
+                "shortcut": "Ctrl+B",
+                "keywords": "booth cockpit vinyl bpm scope harmonic wheel deck",
+                "action": lambda: self.set_view("dj_booth"),
+            },
+            {
+                "title": "DJ Coach",
+                "subtitle": "Setini degerlendir, guclu ve zayif noktalari ogren.",
+                "shortcut": "",
+                "keywords": "coach analyze set performance grade",
+                "action": lambda: self.set_view("dj_coach"),
+            },
+            {
+                "title": "Library Map",
+                "subtitle": "Kutuphaneni scatter plot'ta kesfet.",
+                "shortcut": "",
+                "keywords": "map scatter library dna energy brightness",
+                "action": lambda: self.set_view("library_map"),
+            },
+            {
+                "title": "Smart Set",
+                "subtitle": "Mekan tipine gore enerji egrisi ile otomatik set olustur.",
+                "shortcut": "",
+                "keywords": "smart set wedding club festival template",
+                "action": lambda: self.set_view("smart_set"),
+            },
+            {
+                "title": "DJ Profile",
+                "subtitle": "DJ stil DNA'ni olustur, benzer parcalari bul.",
+                "shortcut": "",
+                "keywords": "profile dna style similarity genre energy",
+                "action": lambda: self.set_view("dj_profile"),
+            },
         ]
 
     def open_next_duplicate_review(self):
@@ -2810,7 +2845,7 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkEntry(
             controls,
-            variable=self.smart_hours,
+            textvariable=self.smart_hours,
             placeholder_text="Hours",
             width=80
         ).pack(side="left", padx=6, pady=12)
