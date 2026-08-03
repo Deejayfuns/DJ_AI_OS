@@ -124,6 +124,8 @@ class Sidebar(ctk.CTkFrame):
 
             ("Smart Set", "smart_set"),
 
+            ("DJ Profile", "dj_profile"),
+
             ("Remix Lab", "remix_lab"),
 
             ("Astra Chat", "astra_chat"),

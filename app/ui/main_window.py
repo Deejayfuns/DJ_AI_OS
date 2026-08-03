@@ -68,6 +68,8 @@ from app.ui.library_map import LibraryMap
 from app.ai.set_recorder import SetRecorder
 from app.ai.smart_playlist import SmartPlaylistGenerator
 from app.ui.beat_grid_view import BeatGridView
+from app.ai.track_similarity import TrackSimilarityEngine
+from app.ai.dj_profile import DJProfile
 
 from data.db.ai_library_db import AILibraryDB
 from app.license.license_manager import LicenseManager
@@ -132,6 +134,8 @@ class MainWindow(ctk.CTk):
         self.dj_coach = DJCoach()
         self.set_recorder = SetRecorder()
         self.smart_playlist = SmartPlaylistGenerator()
+        self.similarity_engine = TrackSimilarityEngine()
+        self.dj_profile = DJProfile()
         self.genre_review = GenreReviewStudio()
 
         # ================= DB =================
@@ -509,6 +513,7 @@ class MainWindow(ctk.CTk):
             "dj_coach": self.build_dj_coach_view,
             "library_map": self.build_library_map_view,
             "smart_set": self.build_smart_set_view,
+            "dj_profile": self.build_dj_profile_view,
         }
 
         builder = builders.get(view, self.build_dashboard)
@@ -2924,6 +2929,194 @@ class MainWindow(ctk.CTk):
             f"SET KAYDI DURDURULDU: {summary.get('tracks_played', 0)} parca, "
             f"{summary.get('duration_minutes', 0)} dakika"
         )
+
+    def build_dj_profile_view(self):
+
+        self.make_section_title(
+            self.content,
+            "DJ Profile / Style DNA",
+            "Kutuphanenin ve setlerinin analiziyle DJ stil DNA'nı olustur."
+        )
+
+        controls = ctk.CTkFrame(self.content, fg_color=CARD, corner_radius=8)
+        controls.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkButton(
+            controls,
+            text="PROFIL OLUSTUR",
+            command=self.generate_dj_profile
+        ).pack(side="left", padx=12, pady=12)
+
+        ctk.CTkButton(
+            controls,
+            text="SECILI PARCA ICIN BENZERLER",
+            command=self.show_track_similarity
+        ).pack(side="left", padx=6, pady=12)
+
+        ctk.CTkButton(
+            controls,
+            text="MFCC MODEL EGIT",
+            command=self.train_mfcc_model
+        ).pack(side="right", padx=6, pady=12)
+
+        self.profile_result = ctk.CTkScrollableFrame(
+            self.content, fg_color=PANEL, corner_radius=8
+        )
+        self.profile_result.pack(fill="both", expand=True, pady=(0, 10))
+
+        self.generate_dj_profile()
+
+    def generate_dj_profile(self):
+
+        source = self.library or self.saved_tracks
+        profile = self.dj_profile.build_profile(source)
+
+        for child in self.profile_result.winfo_children():
+            child.destroy()
+
+        # DNA Display
+        dna = profile.get("dna", "E00-B00-G00-P000")
+        ctk.CTkLabel(
+            self.profile_result,
+            text=f"DJ DNA: {dna}",
+            font=("Segoe UI", 28, "bold"),
+            text_color=ACCENT
+        ).pack(anchor="w", padx=12, pady=(12, 4))
+
+        ctk.CTkLabel(
+            self.profile_result,
+            text=f"{profile.get('track_count', 0)} parca analiz edildi | "
+                 f"{profile.get('genre_count', 0)} farkli tur",
+            font=F_BODY_BOLD,
+            text_color=TEXT
+        ).pack(anchor="w", padx=12, pady=(0, 12))
+
+        # Stats cards
+        stats_frame = ctk.CTkFrame(self.profile_result, fg_color="transparent")
+        stats_frame.pack(fill="x", padx=12, pady=(0, 8))
+
+        for label, value in [
+            ("ORT. ENERJI", f"{profile.get('avg_energy', 0):.2f}"),
+            ("ORT. BPM", f"{profile.get('avg_bpm', 0):.0f}"),
+            ("BPM ARALIGI", profile.get("bpm_range", "--")),
+            ("ORT. AI EAR", f"{profile.get('avg_ear_score', 0):.2f}"),
+        ]:
+            card = ctk.CTkFrame(stats_frame, fg_color=CARD, corner_radius=8)
+            card.pack(side="left", fill="x", expand=True, padx=4)
+            ctk.CTkLabel(card, text=value, font=F_H2, text_color=ACCENT).pack(anchor="w", padx=10, pady=(8, 0))
+            ctk.CTkLabel(card, text=label, font=F_META, text_color=MUTED).pack(anchor="w", padx=10, pady=(0, 8))
+
+        # Energy distribution
+        energy_dist = profile.get("energy_distribution", {})
+        energy_frame = ctk.CTkFrame(self.profile_result, fg_color=CARD, corner_radius=8)
+        energy_frame.pack(fill="x", padx=12, pady=(0, 8))
+
+        ctk.CTkLabel(energy_frame, text="ENERJI DAGILIMI", font=F_BODY_BOLD, text_color=ACCENT).pack(anchor="w", padx=12, pady=(10, 4))
+
+        for label, pct in [("DUSUK", energy_dist.get("low", 0)), ("ORTA", energy_dist.get("mid", 0)), ("YUKSEK", energy_dist.get("high", 0))]:
+            bar_text = f"{label}: {'#' * int(pct * 30)}{'.' * (30 - int(pct * 30))} %{pct*100:.0f}"
+            ctk.CTkLabel(energy_frame, text=bar_text, font=("Consolas", 10), text_color=TEXT).pack(anchor="w", padx=12, pady=1)
+
+        # Top genres
+        top_genres = profile.get("top_genres", [])
+        if top_genres:
+            genre_frame = ctk.CTkFrame(self.profile_result, fg_color=CARD, corner_radius=8)
+            genre_frame.pack(fill="x", padx=12, pady=(0, 8))
+
+            ctk.CTkLabel(genre_frame, text="EN COK KULLANILAN TURLER", font=F_BODY_BOLD, text_color=ACCENT).pack(anchor="w", padx=12, pady=(10, 4))
+
+            for genre, count in top_genres[:5]:
+                pct = count / max(1, profile.get("track_count", 1))
+                ctk.CTkLabel(genre_frame, text=f"  {genre}: {count} parca (%{pct*100:.0f})", text_color=TEXT).pack(anchor="w", padx=12, pady=1)
+
+        # Top keys
+        top_keys = profile.get("top_keys", [])
+        if top_keys:
+            key_frame = ctk.CTkFrame(self.profile_result, fg_color=CARD, corner_radius=8)
+            key_frame.pack(fill="x", padx=12, pady=(0, 8))
+
+            ctk.CTkLabel(key_frame, text="EN COK KULLANILAN ANAHTARLAR", font=F_BODY_BOLD, text_color=NEON_PURPLE).pack(anchor="w", padx=12, pady=(10, 4))
+
+            for key, count in top_keys:
+                ctk.CTkLabel(key_frame, text=f"  {key}: {count} parca", text_color=TEXT).pack(anchor="w", padx=12, pady=1)
+
+        # Insights
+        insights = profile.get("insights", [])
+        if insights:
+            insight_frame = ctk.CTkFrame(self.profile_result, fg_color=CARD, corner_radius=8)
+            insight_frame.pack(fill="x", padx=12, pady=(0, 8))
+
+            ctk.CTkLabel(insight_frame, text="DJ TAVSIYELERI", font=F_BODY_BOLD, text_color=WARNING).pack(anchor="w", padx=12, pady=(10, 4))
+
+            for insight in insights:
+                ctk.CTkLabel(insight_frame, text=f"-> {insight}", text_color=TEXT, wraplength=950, justify="left").pack(anchor="w", padx=12, pady=2)
+
+    def show_track_similarity(self):
+
+        if not self.selected_track:
+            self.set_status("Once bir parca sec.")
+            return
+
+        similar = self.similarity_engine.find_similar(
+            self.selected_track, self.library or self.saved_tracks, limit=5
+        )
+
+        for child in self.profile_result.winfo_children():
+            child.destroy()
+
+        target_name = self.selected_track.get("name", "?")[:50]
+        ctk.CTkLabel(
+            self.profile_result,
+            text=f"SIMILAR TO: {target_name}",
+            font=F_H2,
+            text_color=ACCENT
+        ).pack(anchor="w", padx=12, pady=(12, 8))
+
+        if not similar:
+            ctk.CTkLabel(self.profile_result, text="Benzer parca bulunamadi.", text_color=MUTED).pack(anchor="w", padx=12)
+            return
+
+        for i, track in enumerate(similar, 1):
+            card = ctk.CTkFrame(self.profile_result, fg_color=CARD, corner_radius=8)
+            card.pack(fill="x", padx=12, pady=4)
+
+            score = track.get("similarity_score", 0)
+            reason = track.get("similarity_reason", "")
+
+            ctk.CTkLabel(
+                card,
+                text=f"{i}. {track.get('name', '?')[:50]} | Benzerlik: {score:.0%}",
+                font=F_BODY_BOLD,
+                text_color=ACCENT if score > 0.7 else TEXT
+            ).pack(anchor="w", padx=12, pady=(8, 2))
+
+            ctk.CTkLabel(
+                card,
+                text=f"{track.get('bpm', '?')} BPM | {track.get('genre', '?')} | {reason}",
+                text_color=MUTED,
+                wraplength=900,
+                justify="left"
+            ).pack(anchor="w", padx=12, pady=(0, 8))
+
+    def train_mfcc_model(self):
+
+        self.set_status("MFCC model egitimi baslatildi... (arka plan)")
+
+        def _train_worker():
+            try:
+                import subprocess
+                result = subprocess.run(
+                    [sys.executable, "scripts/train_genre_model.py"],
+                    capture_output=True, text=True, timeout=300
+                )
+                output = result.stdout + result.stderr
+                self.after(0, lambda: self.set_status(
+                    f"MFCC EGITIM: {output[-200:] if output else 'tamamlandi'}"
+                ))
+            except Exception as e:
+                self.after(0, lambda: self.set_status(f"MFCC EGITIM HATASI: {e}"))
+
+        threading.Thread(target=_train_worker, daemon=True).start()
 
     def build_remix_lab_view(self):
 
