@@ -61,6 +61,7 @@ from app.ai.voice_assistant import VoiceAssistant
 from app.ai.camera_assistant import CameraAssistant
 from app.ai.jarvis_assistant import AstraAssistant
 from app.ai.version_detector import detect_version
+from app.ai.emergency_crate import EmergencyCrate
 
 from data.db.ai_library_db import AILibraryDB
 from app.license.license_manager import LicenseManager
@@ -121,6 +122,7 @@ class MainWindow(ctk.CTk):
         self.playback = PlaybackEngine(callback=self.on_now_playing)
         self.deck_engine = DeckEngine()
         self.feedback_learner = FeedbackLearner()
+        self.emergency_crate = EmergencyCrate()
         self.genre_review = GenreReviewStudio()
 
         # ================= DB =================

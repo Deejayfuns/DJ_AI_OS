@@ -251,11 +251,29 @@ class DJBoothView:
         self.vu_a.set_level(energy_a)
         self.vu_b.set_level(deck_b.get("energy", 0.3))
 
-        # Energy curve
+        # Energy curve — use current set if available
         current_set = getattr(win, "current_set", []) or getattr(win, "library", []) or []
         if current_set:
             energies = [t.get("energy", 0.5) for t in current_set]
-            self.energy_curve.set_energies(energies, 0)
+            now_index = getattr(win, "playback", None)
+            # Try to get current track index from playback
+            current_idx = 0
+            if hasattr(now_index, '_index'):
+                current_idx = now_index._index
+            self.energy_curve.set_energies(energies, current_idx)
+
+        # BPM Match Report
+        bpm_report = deck_engine.bpm_match_report()
+        if bpm_report.get("matched"):
+            match_text = f"BPM MATCHED | diff={bpm_report.get('diff', 0)} | {bpm_report.get('key_a', '')} <-> {bpm_report.get('key_b', '')}"
+            if bpm_report.get("harmonic_match"):
+                match_text += " | HARMONIC OK"
+        elif bpm_report.get("reason") != "DECK_EMPTY":
+            match_text = f"BPM DIFF: {bpm_report.get('diff', 0)} | {bpm_report.get('recommendation', '')}"
+        else:
+            match_text = "BPM: deck bos"
+
+        self.status_mix.configure(text=match_text)
 
         # Status
         total = len(current_set)

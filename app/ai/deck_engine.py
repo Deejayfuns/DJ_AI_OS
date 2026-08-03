@@ -119,3 +119,80 @@ class DeckEngine:
             return float(value)
         except (TypeError, ValueError):
             return default
+
+    # =====================================================
+    # BPM MATCHING REPORT
+    # =====================================================
+
+    def bpm_match_report(self):
+        """Generate a BPM matching report between Deck A and B.
+
+        Returns dict with diff, recommendation, and pitch adjustment needed.
+        """
+        deck_a = self.decks.get("A", {}).get("track") or {}
+        deck_b = self.decks.get("B", {}).get("track") or {}
+
+        bpm_a = self.number(deck_a.get("bpm"), 0)
+        bpm_b = self.number(deck_b.get("bpm"), 0)
+
+        if bpm_a <= 0 or bpm_b <= 0:
+            return {
+                "matched": False,
+                "reason": "DECK_EMPTY",
+                "message": "Her iki deck'e de parca yukleyin.",
+            }
+
+        diff = abs(bpm_a - bpm_b)
+        ratio = bpm_a / bpm_b if bpm_b > 0 else 1.0
+
+        if diff <= 1:
+            recommendation = "PERFECT_MATCH"
+            message = f"Harika! BPM farki {diff:.1f} — dogrudan miksleyebilirsin."
+        elif diff <= 3:
+            recommendation = "SLIGHT_ADJUST"
+            pitch_pct = ((bpm_a / bpm_b) - 1) * 100
+            message = (
+                f"BPM farki {diff:.1f} — Deck B'yi %{pitch_pct:+.1f} pitch "
+                f"ayarla veya time-stretch kullan."
+            )
+        elif diff <= 6:
+            recommendation = "NEEDS_ALIGNMENT"
+            pitch_pct = ((bpm_a / bpm_b) - 1) * 100
+            message = (
+                f"BPM farki {diff:.1f} — buyuk uyumsuzluk. "
+                f"Deck B: %{pitch_pct:+.1f} pitch veya farkli parcaya gec."
+            )
+        else:
+            recommendation = "INCOMPATIBLE"
+            message = (
+                f"BPM farki {diff:.1f} — cok buyuk. "
+                f"Deck B'de farkli bir parca sec veya harmonic uyumlu parca bul."
+            )
+
+        # Check harmonic compatibility
+        key_a = deck_a.get("camelot", deck_a.get("key", ""))
+        key_b = deck_b.get("camelot", deck_b.get("key", ""))
+
+        harmonic_match = False
+        if key_a and key_b:
+            harmonic_match = self._are_harmonically_compatible(key_a, key_b)
+
+        return {
+            "matched": diff <= 3,
+            "bpm_a": bpm_a,
+            "bpm_b": bpm_b,
+            "diff": round(diff, 1),
+            "ratio": round(ratio, 3),
+            "recommendation": recommendation,
+            "pitch_adjust_pct": round(((bpm_a / bpm_b) - 1) * 100, 1) if bpm_b > 0 else 0,
+            "harmonic_match": harmonic_match,
+            "key_a": key_a,
+            "key_b": key_b,
+            "message": message,
+        }
+
+    def _are_harmonically_compatible(self, key_a, key_b):
+        """Check if two Camelot keys are harmonically compatible."""
+        from app.ui.dj_widgets import HarmonicWheel
+        compatible = HarmonicWheel.COMPATIBLE_KEYS.get(key_a, [])
+        return key_b in compatible
