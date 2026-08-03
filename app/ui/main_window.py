@@ -70,6 +70,7 @@ from app.ai.smart_playlist import SmartPlaylistGenerator
 from app.ui.beat_grid_view import BeatGridView
 from app.ai.track_similarity import TrackSimilarityEngine
 from app.ai.dj_profile import DJProfile
+from app.ui.enhancements import MiniPlayer, QuickStatsBar, ThemeSwitcher, show_toast
 
 from data.db.ai_library_db import AILibraryDB
 from app.license.license_manager import LicenseManager
@@ -285,7 +286,20 @@ class MainWindow(ctk.CTk):
 
         # DASHBOARD AREA
         self.content = ctk.CTkScrollableFrame(self.main, fg_color="transparent")
-        self.content.pack(fill="both", expand=True, padx=10, pady=10)
+        self.content.pack(fill="both", expand=True, padx=10, pady=(10, 0))
+
+        # MINI PLAYER (persistent bottom bar)
+        self.mini_player = MiniPlayer(
+            self.main,
+            on_play=self.toggle_playback,
+            on_stop=self.stop_playback,
+            on_next=self.next_track,
+        )
+        self.mini_player.pack(fill="x", side="bottom")
+
+        # QUICK STATS BAR
+        self.stats_bar = QuickStatsBar(self.main)
+        self.stats_bar.pack(fill="x", side="bottom")
 
         self.bind_global_shortcuts()
         self.enable_global_drag_drop()
@@ -4745,6 +4759,31 @@ class MainWindow(ctk.CTk):
 
         SettingsView(self).build(self.content)
 
+    def _update_stats_bar(self):
+        """Update the bottom stats bar with current library info."""
+        if not hasattr(self, "stats_bar") or not self.stats_bar.winfo_exists():
+            return
+
+        source = self.library or self.saved_tracks
+        genres = len(set(t.get("parent_genre", t.get("genre", "")) for t in source))
+        dupes = self.count_value(source, "duplicate_status", "POSSIBLE_DUPLICATE")
+        health = self.archive_auditor.audit(self.archive_output_folder).get("health_score", 0)
+
+        # DNA
+        if source:
+            profile = self.dj_profile.build_profile(source[:200])
+            dna = profile.get("dna", "---")
+        else:
+            dna = "---"
+
+        self.stats_bar.update_stats(
+            tracks=len(source),
+            genres=genres,
+            duplicates=dupes,
+            health=health,
+            dna=dna,
+        )
+
     def get_visible_tracks(self):
 
         return self.library or self.saved_tracks
@@ -5006,6 +5045,20 @@ class MainWindow(ctk.CTk):
                     f"new={analyzed}, already_done={skipped} | "
                     f"{self.get_ready_status()}"
                 )
+            )
+
+            self.after(
+                0,
+                lambda: show_toast(
+                    f"Tarama tamamlandi: {analyzed} yeni, {skipped} mevcut",
+                    "success"
+                )
+            )
+
+            # Update stats bar
+            self.after(
+                0,
+                lambda: self._update_stats_bar()
             )
 
         except Exception as e:
@@ -5357,6 +5410,7 @@ class MainWindow(ctk.CTk):
         source = self.library or self.saved_tracks
 
         if not source:
+            show_toast("Once kutuphane yukle!", "warning")
             return
 
         self.current_set = self.set_engine.build_set(source)
@@ -5366,6 +5420,7 @@ class MainWindow(ctk.CTk):
             self.table.set_tracks(self.filtered_tracks(self.active_table_source))
 
         self.set_status("SET READY")
+        show_toast(f"Set hazir: {len(self.current_set)} parca", "success")
 
     # =====================================================
     # PLAYBACK
@@ -5376,6 +5431,7 @@ class MainWindow(ctk.CTk):
             self.current_set = self.library
 
         if not self.current_set:
+            show_toast("Oynatilacak parca yok", "warning")
             return
 
         for track in self.current_set:
@@ -5384,14 +5440,19 @@ class MainWindow(ctk.CTk):
         self.is_playing = True
 
         self.set_status("PLAYING")
+        self.mini_player.set_playing(True)
+        if self.current_set:
+            self.mini_player.update_track(self.current_set[0])
 
         self.playback.play(self.current_set)
+        show_toast("Cal basladi", "success")
 
     def stop_playback(self):
 
         self.playback.stop()
         self.is_playing = False
         self.set_status("STOPPED")
+        self.mini_player.set_playing(False)
 
     def next_track(self):
         self.playback.next_track()
