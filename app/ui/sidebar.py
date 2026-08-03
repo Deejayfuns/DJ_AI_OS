@@ -118,6 +118,10 @@ class Sidebar(ctk.CTkFrame):
 
             ("DJ Booth", "dj_booth"),
 
+            ("DJ Coach", "dj_coach"),
+
+            ("Library Map", "library_map"),
+
             ("Remix Lab", "remix_lab"),
 
             ("Astra Chat", "astra_chat"),

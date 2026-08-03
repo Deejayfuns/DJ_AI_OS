@@ -62,6 +62,9 @@ from app.ai.camera_assistant import CameraAssistant
 from app.ai.jarvis_assistant import AstraAssistant
 from app.ai.version_detector import detect_version
 from app.ai.emergency_crate import EmergencyCrate
+from app.ai.track_dna import generate_dna, dna_to_string
+from app.ai.dj_coach import DJCoach
+from app.ui.library_map import LibraryMap
 
 from data.db.ai_library_db import AILibraryDB
 from app.license.license_manager import LicenseManager
@@ -123,6 +126,7 @@ class MainWindow(ctk.CTk):
         self.deck_engine = DeckEngine()
         self.feedback_learner = FeedbackLearner()
         self.emergency_crate = EmergencyCrate()
+        self.dj_coach = DJCoach()
         self.genre_review = GenreReviewStudio()
 
         # ================= DB =================
@@ -497,6 +501,8 @@ class MainWindow(ctk.CTk):
             "account": self.build_account_view,
             "settings": self.build_settings_view,
             "dj_booth": self.build_dj_booth_view,
+            "dj_coach": self.build_dj_coach_view,
+            "library_map": self.build_library_map_view,
         }
 
         builder = builders.get(view, self.build_dashboard)
@@ -2646,6 +2652,130 @@ class MainWindow(ctk.CTk):
         self.dj_booth = DJBoothView(self)
         self.dj_booth.build(self.content)
 
+    def build_dj_coach_view(self):
+
+        self.make_section_title(
+            self.content,
+            "DJ Coach AI",
+            "Setini degerlendir, guclu ve zayif noktalari ogren."
+        )
+
+        controls = ctk.CTkFrame(self.content, fg_color=CARD, corner_radius=8)
+        controls.pack(fill="x", pady=(0, 10))
+
+        self.coach_style = StringVar(value="CLUB")
+        self.coach_hours = StringVar(value="4")
+
+        ctk.CTkComboBox(
+            controls,
+            variable=self.coach_style,
+            values=["CLUB", "WEDDING", "FESTIVAL", "LOUNGE"],
+            width=140
+        ).pack(side="left", padx=12, pady=12)
+
+        ctk.CTkEntry(
+            controls,
+            textvariable=self.coach_hours,
+            placeholder_text="Hours",
+            width=80
+        ).pack(side="left", padx=6, pady=12)
+
+        ctk.CTkButton(
+            controls,
+            text="ANALYZE SET",
+            command=self.run_dj_coach_analysis
+        ).pack(side="left", padx=6, pady=12)
+
+        self.coach_result = ctk.CTkScrollableFrame(
+            self.content, fg_color=PANEL, corner_radius=8
+        )
+        self.coach_result.pack(fill="both", expand=True, pady=(0, 10))
+
+        ctk.CTkLabel(
+            self.coach_result,
+            text="Set olustur veya yukle, sonra ANALYZE SET'e bas.",
+            text_color=MUTED
+        ).pack(anchor="w", padx=12, pady=12)
+
+    def run_dj_coach_analysis(self):
+
+        source = self.current_set or self.library or self.saved_tracks
+        venue = self.coach_style.get()
+
+        result = self.dj_coach.analyze_set(source, venue)
+
+        for child in self.coach_result.winfo_children():
+            child.destroy()
+
+        # Grade
+        grade = result.get("grade", "N/A")
+        grade_colors = {"S": "#00FFA3", "A": "#22D3FF", "B": "#9B5CFF", "C": "#FFB020", "D": "#FF4D6D"}
+        ctk.CTkLabel(
+            self.coach_result,
+            text=f"DERECE: {grade}",
+            font=("Segoe UI", 36, "bold"),
+            text_color=grade_colors.get(grade, MUTED)
+        ).pack(anchor="w", padx=12, pady=(12, 0))
+
+        ctk.CTkLabel(
+            self.coach_result,
+            text=result.get("summary", ""),
+            text_color=TEXT,
+            font=F_BODY_BOLD,
+            wraplength=1000,
+            justify="left"
+        ).pack(anchor="w", padx=12, pady=(4, 12))
+
+        # Score breakdown
+        scores = result.get("scores", {})
+        if scores:
+            score_frame = ctk.CTkFrame(self.coach_result, fg_color=CARD, corner_radius=8)
+            score_frame.pack(fill="x", padx=12, pady=(0, 10))
+
+            for name, score in scores.items():
+                ctk.CTkLabel(
+                    score_frame,
+                    text=f"{name.upper()}: {score:.0%}",
+                    font=F_BODY_BOLD,
+                    text_color=ACCENT if score >= 0.7 else WARNING
+                ).pack(anchor="w", padx=12, pady=2)
+
+        # Coaching messages
+        coaching = result.get("coaching", [])
+        if coaching:
+            coach_frame = ctk.CTkFrame(self.coach_result, fg_color=CARD, corner_radius=8)
+            coach_frame.pack(fill="x", padx=12, pady=(0, 10))
+
+            ctk.CTkLabel(
+                coach_frame,
+                text="TAVSIYELER",
+                font=F_H3,
+                text_color=ACCENT
+            ).pack(anchor="w", padx=12, pady=(10, 4))
+
+            for msg in coaching:
+                ctk.CTkLabel(
+                    coach_frame,
+                    text=f"-> {msg}",
+                    text_color=TEXT,
+                    wraplength=950,
+                    justify="left"
+                ).pack(anchor="w", padx=12, pady=2)
+
+    def build_library_map_view(self):
+
+        self.make_section_title(
+            self.content,
+            "Library DNA Map",
+            "Kutuphanendeki parcalarin enerji/parlaklik dagilimini kesfet."
+        )
+
+        source = self.library or self.saved_tracks
+
+        self.library_map = LibraryMap(self.content, width=850, height=480)
+        self.library_map.pack(fill="both", expand=True, pady=(0, 10))
+        self.library_map.set_tracks(source)
+
     def build_remix_lab_view(self):
 
         self.make_section_title(
@@ -4515,6 +4645,9 @@ class MainWindow(ctk.CTk):
             ),
             "version_type": detect_version(track.get("name", "")),
         })
+
+        # Track DNA
+        track["track_dna"] = dna_to_string(generate_dna(track))
 
         if track.get("assistant_message"):
             self.log(track["assistant_message"])
