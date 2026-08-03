@@ -7,6 +7,8 @@ from app.ui.theme import (
     ACCENT,
     BACKGROUND,
     CARD,
+    GLASS_BG,
+    GLASS_BORDER,
     MUTED,
     NEON_BLUE,
     NEON_MAGENTA,
@@ -15,6 +17,7 @@ from app.ui.theme import (
     PANEL,
     TEXT,
 )
+from app.ui.glass import draw_glow_rect, draw_glow_line
 
 
 class NeonBoothPanel(ctk.CTkFrame):
@@ -53,7 +56,7 @@ class NeonBoothPanel(ctk.CTkFrame):
         self.canvas = tk.Canvas(
             self,
             height=170,
-            bg=BACKGROUND,
+            bg=GLASS_BG,
             highlightthickness=0
         )
         self.canvas.pack(fill="x", padx=10, pady=10)

@@ -1,6 +1,6 @@
 import customtkinter as ctk
 
-from app.ui.theme import ACCENT, CARD, MUTED, NEON_BLUE, NEON_MAGENTA, NEON_PURPLE_DARK, PANEL, TEXT
+from app.ui.theme import ACCENT, CARD, F_H2, F_BODY, F_BODY_BOLD, GLASS_BG, GLASS_BORDER, MUTED, NEON_BLUE, NEON_MAGENTA, R_MED, R_SMALL, TEXT
 
 
 class AIDashboard(ctk.CTkFrame):
@@ -9,28 +9,28 @@ class AIDashboard(ctk.CTkFrame):
         super().__init__(master)
 
         self.configure(
-            fg_color=PANEL,
-            corner_radius=8,
+            fg_color=GLASS_BG,
+            corner_radius=R_MED,
             border_width=1,
-            border_color=NEON_PURPLE_DARK
+            border_color=GLASS_BORDER
         )
 
         self.title = ctk.CTkLabel(
             self,
             text="AI ENGINE STATUS",
-            font=("Arial", 16, "bold"),
+            font=F_H2,
             text_color=NEON_BLUE
         )
         self.title.pack(anchor="w", padx=10, pady=5)
 
-        self.summary_card = ctk.CTkFrame(self, fg_color=CARD, corner_radius=8)
+        self.summary_card = ctk.CTkFrame(self, fg_color=CARD, corner_radius=R_SMALL)
         self.summary_card.pack(fill="x", padx=10, pady=5)
 
         self.model_label = ctk.CTkLabel(
             self.summary_card,
             text="AI ENGINE METRICS",
             text_color=NEON_BLUE,
-            font=("Segoe UI", 12, "bold")
+            font=F_BODY_BOLD
         )
         self.model_label.pack(anchor="w", padx=10, pady=(10, 2))
 
@@ -38,7 +38,7 @@ class AIDashboard(ctk.CTkFrame):
             self.summary_card,
             text="AI STATUS: IDLE",
             text_color=TEXT,
-            font=("Segoe UI", 11)
+            font=F_BODY
         )
         self.status.pack(anchor="w", padx=10, pady=(0, 10))
 

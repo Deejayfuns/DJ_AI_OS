@@ -241,7 +241,8 @@ class Sidebar(ctk.CTkFrame):
                     fg_color=NEON_PURPLE,
                     hover_color=NEON_MAGENTA,
                     text_color="#FFFFFF",
-                    border_color=ACCENT
+                    border_color=ACCENT,
+                    border_width=2
                 )
 
                 self.active_button = btn
@@ -249,8 +250,9 @@ class Sidebar(ctk.CTkFrame):
             else:
 
                 btn.configure(
-                    fg_color=CARD,
-                    hover_color=HOVER,
+                    fg_color=GLASS_BG,
+                    hover_color=GLASS_BG_HOVER,
                     text_color=TEXT,
-                    border_color=BORDER
+                    border_color=GLASS_BORDER,
+                    border_width=1
                 )

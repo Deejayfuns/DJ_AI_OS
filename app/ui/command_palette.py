@@ -1,6 +1,8 @@
 import customtkinter as ctk
 from tkinter import StringVar
 
+from app.ui.theme import ACCENT, BACKGROUND, F_H2, F_BODY_BOLD, F_META, MUTED, PANEL, SURFACE_RAISED, TEXT
+
 
 class CommandPalette(ctk.CTkToplevel):
 
@@ -24,13 +26,13 @@ class CommandPalette(ctk.CTkToplevel):
 
     def build(self):
 
-        self.configure(fg_color="#0B0D10")
+        self.configure(fg_color=BACKGROUND)
 
         ctk.CTkLabel(
             self,
             text="COMMAND PALETTE",
-            font=("Segoe UI", 18, "bold"),
-            text_color="#00FFA3"
+            font=F_H2,
+            text_color=ACCENT
         ).pack(anchor="w", padx=18, pady=(18, 6))
 
         self.search = ctk.CTkEntry(
@@ -44,7 +46,7 @@ class CommandPalette(ctk.CTkToplevel):
 
         self.list_frame = ctk.CTkScrollableFrame(
             self,
-            fg_color="#111315",
+            fg_color=PANEL,
             corner_radius=8
         )
         self.list_frame.pack(fill="both", expand=True, padx=18, pady=(0, 12))
@@ -52,7 +54,7 @@ class CommandPalette(ctk.CTkToplevel):
         ctk.CTkLabel(
             self,
             text="Enter ilk komutu calistirir | Esc kapatir",
-            text_color="#8A8F98"
+            text_color=MUTED
         ).pack(anchor="w", padx=18, pady=(0, 14))
 
     def bind_shortcuts(self):
@@ -99,7 +101,7 @@ class CommandPalette(ctk.CTkToplevel):
 
     def add_command_row(self, command):
 
-        row = ctk.CTkFrame(self.list_frame, fg_color="#161A1F", corner_radius=8)
+        row = ctk.CTkFrame(self.list_frame, fg_color=SURFACE_RAISED, corner_radius=8)
         row.pack(fill="x", padx=8, pady=5)
 
         left = ctk.CTkFrame(row, fg_color="transparent")
@@ -108,15 +110,15 @@ class CommandPalette(ctk.CTkToplevel):
         ctk.CTkLabel(
             left,
             text=command.get("title", "Untitled"),
-            font=("Segoe UI", 13, "bold"),
-            text_color="#F1F4F8",
+            font=F_BODY_BOLD,
+            text_color=TEXT,
             anchor="w"
         ).pack(anchor="w")
 
         ctk.CTkLabel(
             left,
             text=command.get("subtitle", ""),
-            text_color="#8A8F98",
+            text_color=MUTED,
             anchor="w"
         ).pack(anchor="w", pady=(2, 0))
 
@@ -126,7 +128,7 @@ class CommandPalette(ctk.CTkToplevel):
             ctk.CTkLabel(
                 row,
                 text=shortcut,
-                text_color="#00FFA3",
+                text_color=ACCENT,
                 width=90
             ).pack(side="left", padx=8)
 

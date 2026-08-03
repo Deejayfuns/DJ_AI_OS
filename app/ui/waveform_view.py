@@ -1,7 +1,7 @@
 import customtkinter as ctk
 import tkinter as tk
 
-from app.ui.theme import ACCENT, BACKGROUND, MUTED, NEON_BLUE, NEON_MAGENTA, NEON_PURPLE_DARK, PANEL, TEXT, WARNING
+from app.ui.theme import ACCENT, BACKGROUND, GLASS_BG, MUTED, NEON_BLUE, NEON_MAGENTA, NEON_PURPLE_DARK, PANEL, TEXT, WARNING
 
 try:
     import windnd
@@ -23,7 +23,7 @@ class WaveformView(ctk.CTkFrame):
 
         self.canvas = tk.Canvas(
             self,
-            bg=BACKGROUND,
+            bg=GLASS_BG,
             height=250,
             highlightthickness=0
         )

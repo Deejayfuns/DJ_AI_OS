@@ -9,6 +9,8 @@ from app.ui.theme import (
     BACKGROUND,
     BORDER,
     CARD,
+    GLASS_BG,
+    GLASS_BORDER,
     GLOW,
     MUTED,
     NEON_BLUE,
@@ -20,6 +22,7 @@ from app.ui.theme import (
     TEXT,
     WARNING,
 )
+from app.ui.glass import draw_glow_rect, draw_glow_line
 
 
 class AnimatedArchiveCockpit(ctk.CTkFrame):

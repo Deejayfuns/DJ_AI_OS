@@ -225,10 +225,10 @@ class MainWindow(ctk.CTk):
         # HEADER
         header = ctk.CTkFrame(
             self.main,
-            fg_color=PANEL,
-            corner_radius=8,
+            fg_color=GLASS_BG,
+            corner_radius=R_MED,
             border_width=1,
-            border_color=NEON_PURPLE_DARK
+            border_color=GLASS_BORDER
         )
         header.pack(fill="x", padx=10, pady=10)
 
@@ -238,14 +238,14 @@ class MainWindow(ctk.CTk):
         ctk.CTkLabel(
             header,
             text=f"DJ AI OS // {self.app_version}",
-            font=("Segoe UI", 34, "bold"),
+            font=F_H1,
             text_color=ACCENT
         ).pack(anchor="w", padx=20, pady=(10, 0))
 
         ctk.CTkLabel(
             header,
             text="NEON ARCHIVE COCKPIT | MIX MASTER ENGINE | AI PERFORMANCE BRAIN",
-            font=("Segoe UI", 11, "bold"),
+            font=F_BODY_BOLD,
             text_color=NEON_BLUE
         ).pack(anchor="w", padx=22, pady=(0, 4))
 
@@ -253,7 +253,7 @@ class MainWindow(ctk.CTk):
             header,
             text=self.get_ready_status(),
             text_color=NEON_MAGENTA,
-            font=("Segoe UI", 12, "bold")
+            font=F_BODY_BOLD
         )
         self.status.pack(anchor="w", padx=20, pady=(0, 10))
 
@@ -261,7 +261,7 @@ class MainWindow(ctk.CTk):
             header,
             text="AI ACTIVITY: Sistem hazir.",
             text_color=ACCENT_SOFT,
-            font=("Segoe UI", 12, "bold"),
+            font=F_BODY_BOLD,
             anchor="w"
         )
         self.ai_activity.pack(fill="x", padx=20, pady=(0, 10))

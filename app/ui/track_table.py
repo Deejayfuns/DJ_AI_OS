@@ -21,7 +21,7 @@ class TrackTable(ctk.CTkFrame):
 
         self.configure(
             border_width=1,
-            border_color="#1E1E1E"
+            border_color=GLASS_BORDER
         )
 
         self.on_select = on_select
@@ -42,12 +42,12 @@ class TrackTable(ctk.CTkFrame):
         # =================================================
         style.configure(
             "Treeview",
-            background="#111315",
-            foreground="#EAEAEA",
-            fieldbackground="#111315",
+            background=GLASS_BG,
+            foreground=TEXT,
+            fieldbackground=GLASS_BG,
             borderwidth=0,
             rowheight=34,
-            font=("Segoe UI", 11),
+            font=F_BODY,
         )
 
         # =================================================
@@ -55,17 +55,17 @@ class TrackTable(ctk.CTkFrame):
         # =================================================
         style.configure(
             "Treeview.Heading",
-            background="#181A1F",
-            foreground="#00FFA3",
+            background=SURFACE_RAISED,
+            foreground=ACCENT,
             borderwidth=0,
-            font=("Segoe UI", 11, "bold"),
+            font=F_BODY_BOLD,
             padding=(10, 10)
         )
 
         style.map(
             "Treeview",
             background=[
-                ("selected", "#1F6AA5")
+                ("selected", SELECTED)
             ],
             foreground=[
                 ("selected", "white")
@@ -291,12 +291,12 @@ class TrackTable(ctk.CTkFrame):
         # =================================================
         self.tree.tag_configure(
             "oddrow",
-            background="#13161A"
+            background=GLASS_BG_HOVER
         )
 
         self.tree.tag_configure(
             "evenrow",
-            background="#0F1114"
+            background=GLASS_BG
         )
 
         # =================================================
