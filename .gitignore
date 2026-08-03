@@ -1,0 +1,39 @@
+# =====================================================
+# DJ AI OS - .gitignore
+# =====================================================
+
+# Ortam
+.venv/
+__pycache__/
+*.pyc
+
+# Veritabanları (çalışma anında üretilir)
+*.db
+*.db.txt
+dj_ai_library.db
+data/dj_database.db*
+data/dj_memory.db
+
+# Loglar
+data/logs/
+
+# Bellek / öğrenme verisi (kullanıcı verisi, çalışma anında üretilir)
+astra_memory.json
+astra_graph_memory.json
+dj_memory.json
+app/config/discovered_genres.json
+
+# Üretilen çıktı klasörleri
+DJ_LIBRARY_OUTPUT/
+DJ_EXPORTS/
+DJ_REMIX_LAB/
+DJ_COMMERCIAL/
+
+# Lisans
+license.key
+
+# Paketleme / arşiv
+dj_ai_os.zip
+
+# Üretilen ses dosyaları
+generated_beat_*.wav

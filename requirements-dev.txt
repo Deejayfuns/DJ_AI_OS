@@ -1,0 +1,3 @@
+# DJ AI OS - development / test tooling
+-r requirements.txt
+pytest

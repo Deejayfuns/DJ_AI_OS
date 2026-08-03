@@ -1,0 +1,8 @@
+# DJ AI OS - server (FastAPI commercial API)
+fastapi
+uvicorn
+pydantic
+python-dotenv
+httptools
+watchfiles
+websockets
