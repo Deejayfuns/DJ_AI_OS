@@ -1416,6 +1416,40 @@ class MainWindow(ctk.CTk):
         self.make_metric(metrics, "ARCHIVE HEALTH", f"{archive_health}/100")
         self.make_metric(metrics, "LICENSE PLAN", self.plan.get("plan", "DEMO"))
 
+        # DJ DNA Quick Stats
+        if source:
+            profile = self.dj_profile.build_profile(source[:200])  # Sample for speed
+            dna = profile.get("dna", "E00-B00-G00-P000")
+            dna_frame = ctk.CTkFrame(self.content, fg_color=CARD, corner_radius=8)
+            dna_frame.pack(fill="x", pady=(0, 10))
+
+            ctk.CTkLabel(
+                dna_frame,
+                text=f"DJ DNA: {dna}",
+                font=F_H3,
+                text_color=ACCENT
+            ).pack(side="left", padx=14, pady=8)
+
+            ctk.CTkLabel(
+                dna_frame,
+                text=f"Ort. Enerji: {profile.get('avg_energy', 0):.2f} | "
+                     f"Ort. BPM: {profile.get('avg_bpm', 0):.0f} | "
+                     f"Tur: {profile.get('genre_count', 0)}",
+                font=F_META,
+                text_color=TEXT
+            ).pack(side="left", padx=14, pady=8)
+
+            insight = profile.get("insights", [""])[0] if profile.get("insights") else ""
+            if insight:
+                ctk.CTkLabel(
+                    dna_frame,
+                    text=insight[:80] + "..." if len(insight) > 80 else insight,
+                    font=F_META,
+                    text_color=MUTED,
+                    wraplength=600,
+                    justify="left"
+                ).pack(side="left", padx=14, pady=8)
+
         panel_row = ctk.CTkFrame(self.content, fg_color="transparent")
         panel_row.pack(fill="both", pady=(0, 10), expand=True)
 
