@@ -50,6 +50,7 @@
     "dj_booth": "DJ KABİNİ",
     "beat_studio": "BEAT STÜDYOSU",
     "live_performance": "CANLI PERFORMANS",
+    "song_vault": "SONG VAULT",
     "neural_synth": "NÖRAL SENTEZ",
     "neural_bridge": "NÖRAL KÖPRÜ",
     "pioneer_link": "PIONEER BAĞLANTI",
@@ -86,6 +87,7 @@
     "deck_studio": "DECK STÜDYOSU",
     "beat_studio": "BEAT STÜDYOSU",
     "live_performance": "CANLI PERFORMANS",
+    "song_vault": "SONG VAULT",
     "neural_synth": "NÖRAL SENTEZ",
     "neural_bridge": "NÖRAL KÖPRÜ",
     "pioneer_link": "PIONEER BAĞLANTI"
@@ -247,6 +249,7 @@
       "stage_mode": "Sahne Modu",
       "beat_studio": "Beat Stüdyosu",
       "live_performance": "Canlı Performans",
+      "song_vault": "Song Vault",
       "neural_synth": "Nöral Sentez"
     }
   },

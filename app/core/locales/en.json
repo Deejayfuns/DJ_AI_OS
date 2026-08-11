@@ -50,6 +50,7 @@
     "dj_booth": "DJ BOOTH",
     "beat_studio": "BEAT STUDIO",
     "live_performance": "LIVE PERFORMANCE",
+    "song_vault": "SONG VAULT",
     "neural_synth": "NEURAL SYNTH",
     "neural_bridge": "NEURAL BRIDGE",
     "pioneer_link": "PIONEER LINK",
@@ -86,6 +87,7 @@
     "deck_studio": "DECK STUDIO",
     "beat_studio": "BEAT STUDIO",
     "live_performance": "LIVE PERFORMANCE",
+    "song_vault": "SONG VAULT",
     "neural_synth": "NEURAL SYNTH",
     "neural_bridge": "NEURAL BRIDGE",
     "pioneer_link": "PIONEER LINK"
@@ -247,6 +249,7 @@
       "stage_mode": "Stage Mode",
       "beat_studio": "Beat Studio",
       "live_performance": "Live Performance",
+      "song_vault": "Song Vault",
       "neural_synth": "Neural Synth"
     }
   },

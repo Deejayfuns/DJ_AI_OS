@@ -26,3 +26,5 @@ pyyaml
 msgpack
 watchdog
 zeroconf
+# Song Vault (premium) — high-quality download engine
+yt-dlp

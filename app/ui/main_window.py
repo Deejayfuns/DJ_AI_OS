@@ -1243,6 +1243,13 @@ class MainWindow(ctk.CTk):
                 "action": lambda: self.set_view("live_performance"),
             },
             {
+                "title": t(f"{pc}.song_vault"),
+                "subtitle": "Premium — internetten parca arastir, WAV / 320 kbps MP3 indir.",
+                "shortcut": "",
+                "keywords": "song vault download mp3 wav playlist acquisition premium",
+                "action": lambda: self.set_view("song_vault"),
+            },
+            {
                 "title": t(f"{pc}.neural_synth"),
                 "subtitle": "Neural synth pad ile deneysel ton uret.",
                 "shortcut": "",
@@ -1372,6 +1379,7 @@ class MainWindow(ctk.CTk):
             "crate_builder": self.build_crate_builder_view,
             "live": self.build_live_view,
             "live_performance": self.build_live_performance_view,
+            "song_vault": self.build_song_vault_view,
             "ai_memory": self.build_ai_memory_view,
             "account": self.build_account_view,
             "settings": self.build_settings_view,
@@ -5575,6 +5583,24 @@ class MainWindow(ctk.CTk):
             self.live_perf_panel = self._live_perf_panel
         except Exception as exc:
             self.log(f"LIVE PERFORMANCE PANEL: {exc}")
+            import traceback
+            traceback.print_exc()
+
+    def build_song_vault_view(self):
+
+        self.make_section_title(
+            self.content,
+            "Song Vault",
+            "Premium module — internetten arastir, en kaliteli WAV / 320 kbps "
+            "MP3 olarak indir. Tek parca veya txt playlist."
+        )
+
+        try:
+            from app.ui.song_vault_panel import SongVaultPanel
+            self.song_vault_panel = SongVaultPanel(self.content, win=self)
+            self.song_vault_panel.pack(fill="both", expand=True, pady=(0, 10))
+        except Exception as exc:
+            self.log(f"SONG VAULT PANEL: {exc}")
             import traceback
             traceback.print_exc()
 
