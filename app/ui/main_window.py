@@ -1221,6 +1221,13 @@ class MainWindow(ctk.CTk):
                 "action": lambda: self.set_view("beat_studio"),
             },
             {
+                "title": t(f"{pc}.live_performance"),
+                "subtitle": "Gercek instrument plugin beat — style-from-track ve 16-step grid.",
+                "shortcut": "",
+                "keywords": "live performance instrument grid scene style track",
+                "action": lambda: self.set_view("live_performance"),
+            },
+            {
                 "title": t(f"{pc}.neural_synth"),
                 "subtitle": "Neural synth pad ile deneysel ton uret.",
                 "shortcut": "",
@@ -1349,6 +1356,7 @@ class MainWindow(ctk.CTk):
             "global_trends": self.build_global_trends_view,
             "crate_builder": self.build_crate_builder_view,
             "live": self.build_live_view,
+            "live_performance": self.build_live_performance_view,
             "ai_memory": self.build_ai_memory_view,
             "account": self.build_account_view,
             "settings": self.build_settings_view,
@@ -5532,6 +5540,28 @@ class MainWindow(ctk.CTk):
             self._live_beat_panel.pack(fill="both", expand=True, pady=(8, 0))
         except Exception as e:
             self.log(f"BEAT LIVE PANEL: {e}")
+
+    def build_live_performance_view(self):
+
+        self.make_section_title(
+            self.content,
+            "Live Performance",
+            "Gercek instrument plugin beat — style-from-track, 16-step grid, "
+            "scene A/B ve canli ses cikisi."
+        )
+
+        try:
+            from app.ui.live_performance_panel import LivePerformancePanel
+            cached = getattr(self, "_live_perf_panel", None)
+            if cached is None or not cached.winfo_exists():
+                self._live_perf_panel = LivePerformancePanel(self.content)
+            self._live_perf_panel.pack(fill="both", expand=True, pady=(0, 10))
+            # astra_chat style-scene flow reads win.live_perf_panel
+            self.live_perf_panel = self._live_perf_panel
+        except Exception as exc:
+            self.log(f"LIVE PERFORMANCE PANEL: {exc}")
+            import traceback
+            traceback.print_exc()
 
     def build_ai_memory_view(self):
 

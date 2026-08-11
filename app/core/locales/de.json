@@ -49,6 +49,7 @@
     "deck_studio": "DECK STUDIO",
     "dj_booth": "DJ KABINE",
     "beat_studio": "BEAT STUDIO",
+    "live_performance": "LIVE PERFORMANCE",
     "neural_synth": "NEURAL SYNTH",
     "neural_bridge": "NEURAL BRÜCKE",
     "pioneer_link": "PIONEER LINK",
@@ -84,6 +85,7 @@
     "genre_review": "GENRE PRÜFUNG",
     "deck_studio": "DECK STUDIO",
     "beat_studio": "BEAT STUDIO",
+    "live_performance": "LIVE PERFORMANCE",
     "neural_synth": "NEURAL SYNTH",
     "neural_bridge": "NEURAL BRÜCKE",
     "pioneer_link": "PIONEER LINK"
@@ -244,6 +246,7 @@
       "dj_profile": "DJ Profil",
       "stage_mode": "Bühnenmodus",
       "beat_studio": "Beat Studio",
+      "live_performance": "Live Performance",
       "neural_synth": "Neural Synth"
     }
   },

@@ -26,6 +26,7 @@ NAV_ITEMS = [
     ("sidebar.deck_studio",   "deck_studio",        "🎚"),
     ("sidebar.dj_booth",      "dj_booth",           "🎧"),
     ("sidebar.beat_studio",   "beat_studio",        "🎵"),
+    ("sidebar.live_performance", "live_performance", "🎹"),
     ("sidebar.neural_synth",  "neural_synth",       "🧠"),
     ("sidebar.neural_bridge", "neural_bridge",      "🌉"),
     ("sidebar.pioneer_link",  "pioneer_link",       "🎛"),

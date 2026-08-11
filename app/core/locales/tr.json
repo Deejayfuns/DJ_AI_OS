@@ -49,6 +49,7 @@
     "deck_studio": "DECK STÜDYOSU",
     "dj_booth": "DJ KABİNİ",
     "beat_studio": "BEAT STÜDYOSU",
+    "live_performance": "CANLI PERFORMANS",
     "neural_synth": "NÖRAL SENTEZ",
     "neural_bridge": "NÖRAL KÖPRÜ",
     "pioneer_link": "PIONEER BAĞLANTI",
@@ -84,6 +85,7 @@
     "genre_review": "TÜR İNCELEMESİ",
     "deck_studio": "DECK STÜDYOSU",
     "beat_studio": "BEAT STÜDYOSU",
+    "live_performance": "CANLI PERFORMANS",
     "neural_synth": "NÖRAL SENTEZ",
     "neural_bridge": "NÖRAL KÖPRÜ",
     "pioneer_link": "PIONEER BAĞLANTI"
@@ -244,6 +246,7 @@
       "dj_profile": "DJ Profili",
       "stage_mode": "Sahne Modu",
       "beat_studio": "Beat Stüdyosu",
+      "live_performance": "Canlı Performans",
       "neural_synth": "Nöral Sentez"
     }
   },

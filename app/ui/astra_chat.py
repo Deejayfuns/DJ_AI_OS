@@ -226,9 +226,9 @@ class AstraChatPanel:
             from app.ai.style_scene import StyleScene
             from app.ai.style_generator import describe_style
 
-            # Make sure the performance panel exists (open beat studio view)
+            # Make sure the performance panel exists (open live performance view)
             if not hasattr(win, "live_perf_panel"):
-                win.set_view("beat_studio")
+                win.set_view("live_performance")
             panel = getattr(win, "live_perf_panel", None)
             if panel is None:
                 return {"reply": "Canli performans paneli hazir degil.", "action": "scene", "result": {}}
