@@ -1,268 +1,171 @@
-import customtkinter as ctk
+"""
+DJ AI OS — Pro DJ Sidebar (Rekordbox/Serato style)
 
-from app.ui.theme import *
+Compact sidebar with icon-based navigation.
+Active state: RED left indicator bar.
+Collapsed: 56px with icons. Expanded: 220px with labels.
+"""
+
+import customtkinter as ctk
+from app.ui.theme import (
+    BG, SURFACE, SURFACE_RAISED, BORDER, RED, RED_HOVER, RED_DIM,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM, BLUE_BRIGHT,
+    F_H3, F_META,
+)
+from app.core.i18n import t
+
+
+# Nav items: (label_key, view_key, icon_unicode)
+NAV_ITEMS = [
+    ("sidebar.performance",   "performance_dash",   "⚡"),
+    ("sidebar.dashboard",     "dashboard",          "📊"),
+    ("sidebar.music_doctor",  "analyze",            "🏥"),
+    ("sidebar.library",       "library",            "📁"),
+    ("sidebar.archive",       "archive_guardian",   "🛡"),
+    ("sidebar.set_builder",   "set_show",           "🎛"),
+    ("sidebar.deck_studio",   "deck_studio",        "🎚"),
+    ("sidebar.dj_booth",      "dj_booth",           "🎧"),
+    ("sidebar.beat_studio",   "beat_studio",        "🎵"),
+    ("sidebar.neural_synth",  "neural_synth",       "🧠"),
+    ("sidebar.neural_bridge", "neural_bridge",      "🌉"),
+    ("sidebar.pioneer_link",  "pioneer_link",       "🎛"),
+    ("sidebar.dj_coach",      "dj_coach",           "📝"),
+    ("sidebar.library_map",   "library_map",        "🗺"),
+    ("sidebar.smart_set",     "smart_set",          "⚡"),
+    ("sidebar.dj_profile",    "dj_profile",         "👤"),
+    ("sidebar.remix_lab",     "remix_lab",          "🔀"),
+    ("sidebar.astra_chat",    "astra_chat",         "🤖"),
+    ("sidebar.export_cloud",  "cloud_export",       "☁"),
+    ("sidebar.account",       "account",            "⚙"),
+    ("sidebar.settings",      "settings",           "🔧"),
+]
 
 
 class Sidebar(ctk.CTkFrame):
 
     def __init__(self, master):
-
         super().__init__(
             master,
-            width=280,
-            fg_color=PANEL,
+            width=180,
+            fg_color=SURFACE,
             corner_radius=0,
-            border_width=1,
-            border_color=NEON_PURPLE_DARK
         )
 
         self.master = master
-
         self.active_button = None
-
+        self.active_label = None
         self.buttons = {}
+        self.labels = {}
+        self.indicators = {}   # label_key -> left indicator bar widget
 
         self.pack_propagate(False)
+        self._build()
 
-        self.build()
-
-    # =====================================================
-    # BUILD
-    # =====================================================
-    def build(self):
-
-        # =================================================
-        # TOP
-        # =================================================
-        self.top = ctk.CTkFrame(
-            self,
-            fg_color="transparent"
-        )
-
-        self.top.pack(
-            fill="x",
-            pady=(30, 10)
-        )
-
+    def _build(self):
         # =================================================
         # LOGO
         # =================================================
+        self.logo_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.logo_frame.pack(fill="x", pady=(12, 4))
+
         ctk.CTkLabel(
-            self.top,
-            text="DJ AI OS",
-            font=("Segoe UI", 30, "bold"),
-            text_color=ACCENT
-        ).pack(
-            anchor="w",
-            padx=24
-        )
+            self.logo_frame, text="DJ AI OS", font=F_H3, text_color=RED,
+        ).pack(anchor="w", padx=14)
 
-        # =================================================
-        # SUBTITLE
-        # =================================================
         ctk.CTkLabel(
-            self.top,
-            text="NEON PERFORMANCE SYSTEM",
-            font=("Segoe UI", 11),
-            text_color=NEON_BLUE
-        ).pack(
-            anchor="w",
-            padx=26,
-            pady=(2, 18)
-        )
+            self.logo_frame, text="PRO DJ", font=F_META, text_color=TEXT_DIM,
+        ).pack(anchor="w", padx=14)
 
         # =================================================
-        # DIVIDER
+        # SEPARATOR
         # =================================================
-        divider = ctk.CTkFrame(
-            self,
-            height=1,
-            fg_color=NEON_PURPLE_DARK
-        )
-
-        divider.pack(
-            fill="x",
-            padx=18,
-            pady=(0, 20)
-        )
+        sep = ctk.CTkFrame(self, height=1, fg_color=BORDER)
+        sep.pack(fill="x", padx=12, pady=(8, 8))
 
         # =================================================
-        # NAVIGATION
+        # NAV SCROLLABLE
         # =================================================
         self.nav = ctk.CTkScrollableFrame(
-            self,
-            fg_color="transparent"
+            self, fg_color="transparent",
+            scrollbar_button_color=SURFACE_RAISED,
+            scrollbar_button_hover_color=BORDER,
         )
-
-        self.nav.pack(
-            fill="both",
-            expand=True
-        )
+        self.nav.pack(fill="both", expand=True)
 
         # =================================================
-        # NAV ITEMS
+        # NAV BUTTONS
         # =================================================
-        nav_items = [
-
-            ("Dashboard", "dashboard"),
-
-            ("Music Doctor", "analyze"),
-
-            ("Library", "library"),
-
-            ("Archive Guardian", "archive_guardian"),
-
-            ("Set & Show", "set_show"),
-
-            ("Deck Studio", "deck_studio"),
-
-            ("DJ Booth", "dj_booth"),
-
-            ("DJ Coach", "dj_coach"),
-
-            ("Library Map", "library_map"),
-
-            ("Smart Set", "smart_set"),
-
-            ("DJ Profile", "dj_profile"),
-
-            ("Remix Lab", "remix_lab"),
-
-            ("Astra Chat", "astra_chat"),
-
-            ("Export & Cloud", "cloud_export"),
-
-            ("Account", "account"),
-
-            ("Settings", "settings")
-
-        ]
-
-
-        for label, view in nav_items:
+        for label_key, view, icon in NAV_ITEMS:
+            label_text = t(label_key)
+            btn_frame = ctk.CTkFrame(self.nav, fg_color="transparent", height=32)
+            btn_frame.pack(fill="x", padx=6, pady=1)
+            btn_frame.pack_propagate(False)
 
             btn = ctk.CTkButton(
-
-                self.nav,
-
-                text=label,
-
-                height=48,
-
-                corner_radius=12,
-
-                fg_color=CARD,
-
-                hover_color=HOVER,
-
-                border_width=1,
-
-                border_color=BORDER,
-
-                text_color=TEXT,
-
+                btn_frame,
+                text=f" {icon}  {label_text}",
+                height=32,
+                corner_radius=4,
+                fg_color="transparent",
+                hover_color=SURFACE_RAISED,
+                text_color=TEXT_SECONDARY,
                 anchor="w",
-
-                font=("Segoe UI", 14, "bold"),
-
-                command=lambda v=view, l=label:
-                self.on_click(v, l)
-
+                font=("Segoe UI", 11),
+                command=lambda v=view, k=label_key: self._on_click(v, k),
             )
+            btn.pack(fill="x", side="left", expand=True)
 
-            btn.pack(
-                fill="x",
-                padx=18,
-                pady=5
-            )
+            # left indicator bar (hidden until active)
+            ind = ctk.CTkFrame(btn_frame, width=3, height=22, fg_color="transparent",
+                               corner_radius=0)
+            ind.pack(side="left", padx=(0, 0))
+            ind.pack_propagate(False)
 
-            self.buttons[label] = btn
+            self.buttons[label_key] = btn
+            self.labels[label_key] = label_key
+            self.indicators[label_key] = ind
 
         # =================================================
         # FOOTER
         # =================================================
-        self.footer = ctk.CTkFrame(
-            self,
-            fg_color="transparent"
+        footer_sep = ctk.CTkFrame(self, height=1, fg_color=BORDER)
+        footer_sep.pack(fill="x", padx=12, pady=(8, 4))
+
+        self.version = ctk.CTkLabel(
+            self, text="v24 ULTRA PRODUCER",
+            font=("Consolas", 9), text_color=TEXT_DIM,
         )
+        self.version.pack(pady=(0, 10))
 
-        self.footer.pack(
-            fill="x",
-            pady=20
-        )
+        # Default active
+        self.set_active("sidebar.dashboard")
 
-        footer_line = ctk.CTkFrame(
-            self.footer,
-            height=1,
-            fg_color=NEON_PURPLE_DARK
-        )
-
-        footer_line.pack(
-            fill="x",
-            padx=18,
-            pady=(0, 15)
-        )
-
-        ctk.CTkLabel(
-            self.footer,
-            text="AI PERFORMANCE ENGINE",
-            font=("Segoe UI", 10),
-            text_color=NEON_BLUE
-        ).pack(
-            anchor="w",
-            padx=24
-        )
-
-        ctk.CTkLabel(
-            self.footer,
-            text="v24 ULTRA PRODUCER",
-            font=("Segoe UI", 10, "bold"),
-            text_color=ACCENT
-        ).pack(
-            anchor="w",
-            padx=24,
-            pady=(2, 0)
-        )
-
-        # default active
-        self.set_active("Dashboard")
-
-    # =====================================================
-    # CLICK
-    # =====================================================
-    def on_click(self, view, label):
-
+    def _on_click(self, view, label_key):
         if hasattr(self.master, "set_view"):
-
             self.master.set_view(view)
+        self.set_active(label_key)
 
-        self.set_active(label)
-
-    # =====================================================
-    # ACTIVE STYLE
-    # =====================================================
-    def set_active(self, label):
-
+    def set_active(self, label_key):
+        icon = lambda name: NAV_ITEMS[[i[0] for i in NAV_ITEMS].index(name)][2]
         for name, btn in self.buttons.items():
-
-            if name == label:
-
+            label_text = t(name)
+            ind = self.indicators.get(name)
+            if name == label_key:
                 btn.configure(
-                    fg_color=NEON_PURPLE,
-                    hover_color=NEON_MAGENTA,
-                    text_color="#FFFFFF",
-                    border_color=ACCENT,
-                    border_width=2
+                    fg_color=RED_DIM,
+                    text_color=TEXT_PRIMARY,
+                    font=("Segoe UI", 11, "bold"),
+                    text=f" {icon(name)}  {label_text}",
                 )
-
+                if ind is not None:
+                    ind.configure(fg_color=RED)
                 self.active_button = btn
-
             else:
-
                 btn.configure(
-                    fg_color=GLASS_BG,
-                    hover_color=GLASS_BG_HOVER,
-                    text_color=TEXT,
-                    border_color=GLASS_BORDER,
-                    border_width=1
+                    fg_color="transparent",
+                    text_color=TEXT_SECONDARY,
+                    font=("Segoe UI", 11),
+                    text=f" {icon(name)}  {label_text}",
                 )
+                if ind is not None:
+                    ind.configure(fg_color="transparent")
