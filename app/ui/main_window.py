@@ -5523,6 +5523,7 @@ class MainWindow(ctk.CTk):
         from app.ui.performance_dashboard import PerformanceDashboard
         dash = PerformanceDashboard(self)
         dash.build(self.content)
+        self.performance_dash = dash
 
     def build_neural_synth_view(self):
 
@@ -6433,7 +6434,7 @@ class MainWindow(ctk.CTk):
         if track:
             self.after(0, lambda t=track: self.add_track_to_ui(t))
 
-        # throttled live refresh for the DJ booth (every ~500ms)
+        # throttled live refresh for live views (every ~500ms)
         self._ui_consumer_tick = getattr(self, "_ui_consumer_tick", 0) + 1
         if self._ui_consumer_tick % 10 == 0:
             if (
@@ -6443,6 +6444,15 @@ class MainWindow(ctk.CTk):
             ):
                 try:
                     self.dj_booth.refresh()
+                except Exception:
+                    pass
+            if (
+                self.current_view == "performance_dash"
+                and hasattr(self, "performance_dash")
+                and getattr(self.performance_dash, "refresh", None)
+            ):
+                try:
+                    self.performance_dash.refresh()
                 except Exception:
                     pass
 
