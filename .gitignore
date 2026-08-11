@@ -40,3 +40,6 @@ dist/
 
 # Üretilen ses dosyaları
 generated_beat_*.wav
+
+# Bulut indirme önbelleği (çalışma anında üretilir)
+DJ_CLOUD_DOWNLOADS/
