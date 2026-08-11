@@ -206,10 +206,29 @@ class MainWindow(ctk.CTk):
     def _on_app_close(self):
         """Cinematic power-down: a full-window overlay animates the cabin
         shutting down while ASTRA speaks her farewell, then the window
-        tears down."""
+        tears down. Background threads are signalled to stop first."""
         if self._shutting_down:
             return
         self._shutting_down = True
+
+        # signal background threads to stop cleanly
+        self.astra_listener_running = False
+        self.jarvis_holo_running = False
+        try:
+            if self.scan_cancel_event is not None:
+                self.scan_cancel_event.set()
+        except Exception:
+            pass
+        try:
+            self.is_scanning_library = False
+        except Exception:
+            pass
+        try:
+            if getattr(self, "playback", None) is not None:
+                self.playback.playing = False
+        except Exception:
+            pass
+
         self._speak_farewell()
         try:
             self._build_powerdown_overlay()
