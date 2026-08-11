@@ -192,6 +192,28 @@
     "bpm_key": "BPM: {bpm}  TON: {key}",
     "net": "NET ----"
   },
+  "astra_chat": {
+    "title": "ASTRA AI",
+    "status_online": "Hazır",
+    "welcome": "Merhaba! Ben Astra, DJ AI asistanınım.\nBeat üretebilirim, set oluşturabilirim, parçaları analiz edebilirim.\nNe yapmak istersin?",
+    "input_placeholder": "Astra'ya komut verin...",
+    "send": "GÖNDER",
+    "you": "Sen",
+    "quick": {
+      "mission": "Görevim",
+      "make_beat": "Beat Yap",
+      "build_set": "Set Oluştur",
+      "analyze": "Analiz Et",
+      "key_match": "Key Uyumu"
+    },
+    "quick_cmds": {
+      "mission": "görevin ne",
+      "make_beat": "128 BPM house beat yap",
+      "build_set": "set oluştur",
+      "analyze": "arşiv sağlığını göster",
+      "key_match": "8A ile 9A karışır mı?"
+    }
+  },
   "palette": {
     "title": "KOMUT PALETİ",
     "search_placeholder": "Komut ara: set, deck, doktor, export...",

@@ -192,6 +192,28 @@
     "bpm_key": "BPM: {bpm}  KEY: {key}",
     "net": "NET ----"
   },
+  "astra_chat": {
+    "title": "ASTRA AI",
+    "status_online": "Ready",
+    "welcome": "Hello! I'm Astra, your DJ AI assistant.\nI can produce beats, build sets, and analyze tracks.\nWhat would you like to do?",
+    "input_placeholder": "Give Astra a command...",
+    "send": "SEND",
+    "you": "You",
+    "quick": {
+      "mission": "My Mission",
+      "make_beat": "Make Beat",
+      "build_set": "Build Set",
+      "analyze": "Analyze",
+      "key_match": "Key Match"
+    },
+    "quick_cmds": {
+      "mission": "what is your mission",
+      "make_beat": "make a 128 BPM house beat",
+      "build_set": "build a set",
+      "analyze": "show archive health",
+      "key_match": "does 8A mix with 9A?"
+    }
+  },
   "palette": {
     "title": "COMMAND PALETTE",
     "search_placeholder": "Search commands: set, deck, doctor, export...",

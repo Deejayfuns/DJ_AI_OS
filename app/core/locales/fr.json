@@ -192,6 +192,28 @@
     "bpm_key": "BPM: {bpm}  TONALITÉ: {key}",
     "net": "RÉSEAU ----"
   },
+  "astra_chat": {
+    "title": "ASTRA AI",
+    "status_online": "Prêt",
+    "welcome": "Bonjour ! Je suis Astra, votre assistant DJ IA.\nJe peux produire des beats, créer des sets et analyser des morceaux.\nQue souhaitez-vous faire ?",
+    "input_placeholder": "Donnez une commande à Astra...",
+    "send": "ENVOYER",
+    "you": "Vous",
+    "quick": {
+      "mission": "Ma Mission",
+      "make_beat": "Créer Beat",
+      "build_set": "Créer Set",
+      "analyze": "Analyser",
+      "key_match": "Correspondance Ton"
+    },
+    "quick_cmds": {
+      "mission": "quelle est ta mission",
+      "make_beat": "fais un beat house 128 BPM",
+      "build_set": "crée un set",
+      "analyze": "montre la santé de l'archive",
+      "key_match": "est-ce que 8A se mixe avec 9A ?"
+    }
+  },
   "palette": {
     "title": "PALETTE DE COMMANDES",
     "search_placeholder": "Rechercher des commandes : set, deck, docteur, export...",

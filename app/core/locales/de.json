@@ -192,6 +192,28 @@
     "bpm_key": "BPM: {bpm}  TONART: {key}",
     "net": "NETZ ----"
   },
+  "astra_chat": {
+    "title": "ASTRA AI",
+    "status_online": "Bereit",
+    "welcome": "Hallo! Ich bin Astra, dein DJ-AI-Assistent.\nIch kann Beats produzieren, Sets erstellen und Tracks analysieren.\nWas möchtest du tun?",
+    "input_placeholder": "Gib Astra einen Befehl...",
+    "send": "SENDEN",
+    "you": "Du",
+    "quick": {
+      "mission": "Meine Mission",
+      "make_beat": "Beat Machen",
+      "build_set": "Set Erstellen",
+      "analyze": "Analysieren",
+      "key_match": "Tonart Match"
+    },
+    "quick_cmds": {
+      "mission": "was ist deine Mission",
+      "make_beat": "mache einen 128 BPM House Beat",
+      "build_set": "erstelle ein Set",
+      "analyze": "zeige Archiv-Gesundheit",
+      "key_match": "mischt 8A mit 9A?"
+    }
+  },
   "palette": {
     "title": "BEFEHLSPALETTE",
     "search_placeholder": "Befehle suchen: set, deck, doktor, export...",

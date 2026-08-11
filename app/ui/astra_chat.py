@@ -18,6 +18,7 @@ from app.ui.theme import (
     BG, SURFACE, SURFACE_RAISED, BORDER, RED, GREEN, AMBER, BLUE_BRIGHT,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM, F_H3, F_BODY, F_BODY_BOLD, F_META,
 )
+from app.core.i18n import t
 
 
 class AstraChatPanel:
@@ -39,7 +40,7 @@ class AstraChatPanel:
         title.pack(fill="x")
         title.pack_propagate(False)
 
-        ctk.CTkLabel(title, text="ASTRA AI", font=F_H3, text_color=RED).pack(side="left", padx=12)
+        ctk.CTkLabel(title, text=t("astra_chat.title"), font=F_H3, text_color=RED).pack(side="left", padx=12)
 
         # Status dot
         self.status_dot = ctk.CTkLabel(
@@ -48,7 +49,7 @@ class AstraChatPanel:
         self.status_dot.pack(side="left", padx=4)
 
         self.status_text = ctk.CTkLabel(
-            title, text="Hosgeldiniz", font=F_META, text_color=TEXT_DIM
+            title, text=t("astra_chat.status_online"), font=F_META, text_color=TEXT_DIM
         )
         self.status_text.pack(side="left", padx=4)
 
@@ -74,9 +75,7 @@ class AstraChatPanel:
         self.chat_canvas.pack(fill="both", expand=True)
 
         # Welcome message
-        self._add_message("astra", "Merhaba! Ben Astra, DJ AI asistaniyim.\n"
-                          "Beat uretebilirim, set olusturabilirim, parcalari analiz edebilirim.\n"
-                          "Ne yapmak istersin?")
+        self._add_message("astra", t("astra_chat.welcome"))
 
         # Input area
         input_frame = ctk.CTkFrame(parent, fg_color=SURFACE, corner_radius=0, height=50)
@@ -85,14 +84,14 @@ class AstraChatPanel:
 
         self.input_entry = ctk.CTkEntry(
             input_frame,
-            placeholder_text="Astra'ya komut verin...",
+            placeholder_text=t("astra_chat.input_placeholder"),
             font=F_BODY, fg_color=BG, border_color=BORDER,
         )
         self.input_entry.pack(side="left", fill="x", expand=True, padx=(8, 4), pady=8)
         self.input_entry.bind("<Return>", lambda e: self._send_message())
 
         self.send_btn = ctk.CTkButton(
-            input_frame, text="GONDER", width=80, height=34,
+            input_frame, text=t("astra_chat.send"), width=80, height=34,
             fg_color=RED, hover_color="#FF5A68", text_color="#FFF",
             font=F_BODY_BOLD, command=self._send_message,
         )
@@ -102,13 +101,22 @@ class AstraChatPanel:
         quick_frame = ctk.CTkFrame(parent, fg_color="transparent")
         quick_frame.pack(fill="x", padx=4, pady=(0, 4))
 
-        for label, cmd in [
-            ("Gorevim", "gorevin ne"),
-            ("Beat Yap", "128 BPM house beat yap"),
-            ("Set Olustur", "set olustur"),
-            ("Analiz Et", "arsiv sagligini goster"),
-            ("Key Uyumu", "8A ile 9A karisir mi?"),
-        ]:
+        quick_labels = [
+            t("astra_chat.quick.mission"),
+            t("astra_chat.quick.make_beat"),
+            t("astra_chat.quick.build_set"),
+            t("astra_chat.quick.analyze"),
+            t("astra_chat.quick.key_match"),
+        ]
+        quick_cmds = [
+            t("astra_chat.quick_cmds.mission"),
+            t("astra_chat.quick_cmds.make_beat"),
+            t("astra_chat.quick_cmds.build_set"),
+            t("astra_chat.quick_cmds.analyze"),
+            t("astra_chat.quick_cmds.key_match"),
+        ]
+
+        for label, cmd in zip(quick_labels, quick_cmds):
             ctk.CTkButton(
                 quick_frame, text=label, fg_color=BG, hover_color=SURFACE_RAISED,
                 text_color=TEXT_SECONDARY, font=F_META, width=90, height=26,
@@ -302,7 +310,7 @@ class AstraChatPanel:
                        anchor="e" if is_user else "w")
 
         # Sender label
-        sender_text = "Sen" if is_user else "Astra"
+        sender_text = t("astra_chat.you") if is_user else "Astra"
         sender_color = RED if is_user else BLUE_BRIGHT
 
         ctk.CTkLabel(
