@@ -21,3 +21,8 @@ beautifulsoup4
 mido
 torch
 torchaudio
+# ORB Core dependencies
+pyyaml
+msgpack
+watchdog
+zeroconf

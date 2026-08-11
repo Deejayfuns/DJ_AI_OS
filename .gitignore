@@ -34,6 +34,9 @@ license.key
 
 # Paketleme / arşiv
 dj_ai_os.zip
+build/
+dist/
+*.spec
 
 # Üretilen ses dosyaları
 generated_beat_*.wav
