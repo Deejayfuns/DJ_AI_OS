@@ -15,7 +15,7 @@ except Exception:
 from app.core.i18n import t, get_language, set_language, available_languages
 
 from app.ui.sidebar import Sidebar
-from app.ui.track_table import TrackTable
+from app.ui.virtual_track_table import TrackTable
 from app.ui.ai_log_panel import AILogPanel
 from app.ui.ai_dashboard import AIDashboard
 from app.ui.animated_cockpit import AnimatedArchiveCockpit

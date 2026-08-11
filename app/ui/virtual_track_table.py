@@ -71,6 +71,7 @@ class VirtualizedTrackTable(ctk.CTkFrame):
 
         # Scroll
         self._scroll_y = 0
+        self._scroll_x = 0
         self._scroll_target = 0
         self._animating = False
 
@@ -94,13 +95,84 @@ class VirtualizedTrackTable(ctk.CTkFrame):
             "Artist": 180,
             "BPM": 70,
             "Key": 60,
+            "Camelot": 80,
             "Duration": 80,
             "Genre": 120,
             "Energy": 70,
-            "Camelot": 80,
             "Rating": 60,
+            "Role": 110,
+            "Quality": 110,
+            "Ear": 70,
+            "Heart": 70,
+            "Mix": 120,
+            "Archive": 100,
         }
         return [defaults.get(col, 120) for col in self.columns]
+
+    def _total_width(self) -> int:
+        """Sum of all column widths (the canvas content width)."""
+        return sum(self.column_widths)
+
+    @staticmethod
+    def _cell_text(track: Dict, col: str) -> str:
+        """Render one cell's text for a given column name."""
+        col_l = col.lower()
+        if col == "#":
+            return ""
+        if col == "Title":
+            return str(track.get("name", track.get("title", "Unknown")))
+        if col == "Artist":
+            return str(track.get("artist", "Unknown"))
+        if col == "BPM":
+            return f"{track.get('bpm', 0):.0f}" if track.get("bpm") else "—"
+        if col in ("Key", "Camelot"):
+            return str(track.get("camelot", track.get("key", "—")))
+        if col == "Duration":
+            secs = track.get("duration", 0)
+            if not secs:
+                return "—"
+            return f"{int(secs // 60)}:{int(secs % 60):02d}"
+        if col == "Genre":
+            return str(track.get("genre", track.get("parent_genre", "—")))
+        if col == "Energy":
+            energy = track.get("energy", 0)
+            if not energy:
+                return "—"
+            bars = int(energy * 5)
+            return f"{'█' * bars}{'░' * (5 - bars)} {energy:.0%}"
+        if col == "Ear":
+            v = track.get("ai_ear_score", 0)
+            return f"{float(v or 0):.2f}"
+        if col == "Heart":
+            v = track.get("heart_score", 0)
+            return f"{float(v or 0):.2f}"
+        # Role / Quality / Mix / Archive / custom columns fall through here
+        return str(track.get(col_l, track.get(col, "—")))
+
+    @staticmethod
+    def _sort_value(track: Dict, col: str):
+        """Return a sortable value for a column name."""
+        col_l = col.lower()
+        if col == "Title":
+            return str(track.get("name", track.get("title", ""))).lower()
+        if col == "Artist":
+            return str(track.get("artist", "")).lower()
+        if col == "Key" or col == "Camelot":
+            return str(track.get("camelot", track.get("key", ""))).lower()
+        if col == "Ear":
+            return float(track.get("ai_ear_score", 0) or 0)
+        if col == "Heart":
+            return float(track.get("heart_score", 0) or 0)
+        if col == "Energy":
+            return float(track.get("energy", 0) or 0)
+        if col == "Duration":
+            return float(track.get("duration", 0) or 0)
+        if col == "BPM":
+            return float(track.get("bpm", 0) or 0)
+        val = track.get(col_l, track.get(col, ""))
+        if isinstance(val, (int, float)):
+            return val
+        return str(val).lower()
 
     def _build_ui(self):
         """Build the canvas-based UI."""
@@ -121,7 +193,7 @@ class VirtualizedTrackTable(ctk.CTkFrame):
         canvas_frame = ctk.CTkFrame(self, fg_color="transparent")
         canvas_frame.pack(fill="both", expand=True)
 
-        # Scrollbar
+        # Scrollbars
         self.v_scrollbar = ctk.CTkScrollbar(
             canvas_frame,
             orientation="vertical",
@@ -129,6 +201,14 @@ class VirtualizedTrackTable(ctk.CTkFrame):
             width=12,
         )
         self.v_scrollbar.pack(side="right", fill="y")
+
+        self.h_scrollbar = ctk.CTkScrollbar(
+            canvas_frame,
+            orientation="horizontal",
+            command=self._on_h_scrollbar,
+            height=12,
+        )
+        self.h_scrollbar.pack(side="bottom", fill="x")
 
         # Canvas
         self.canvas = tk.Canvas(
@@ -264,14 +344,10 @@ class VirtualizedTrackTable(ctk.CTkFrame):
         if self._sort_column is not None:
             col_name = self.columns[self._sort_column]
             reverse = self._sort_reverse
-
-            def sort_key(track):
-                val = track.get(col_name.lower(), track.get(col_name, ""))
-                if isinstance(val, (int, float)):
-                    return val
-                return str(val).lower()
-
-            self._filtered_tracks.sort(key=sort_key, reverse=reverse)
+            self._filtered_tracks.sort(
+                key=lambda track: self._sort_value(track, col_name),
+                reverse=reverse,
+            )
 
     # ============================================================
     # DRAWING
@@ -286,7 +362,7 @@ class VirtualizedTrackTable(ctk.CTkFrame):
         if width <= 1:
             return
 
-        x = 0
+        x = -self._scroll_x
         for i, (col, col_width) in enumerate(zip(self.columns, self.column_widths)):
             # Clamp to canvas width
             if x >= width:
@@ -326,6 +402,8 @@ class VirtualizedTrackTable(ctk.CTkFrame):
                 )
 
             x += actual_width
+
+        self._update_h_scrollbar()
 
     def _draw_rows(self):
         """Draw visible rows only (virtualized)."""
@@ -395,7 +473,7 @@ class VirtualizedTrackTable(ctk.CTkFrame):
             )
 
         # Row number
-        x = 0
+        x = -self._scroll_x
         canvas.create_text(
             x + 12, y + self.row_height // 2,
             text=str(idx + 1),
@@ -404,22 +482,15 @@ class VirtualizedTrackTable(ctk.CTkFrame):
             anchor="w",
         )
 
-        # Columns
-        x = self.column_widths[0]  # Skip "#" column
-        col_data = [
-            track.get("name", track.get("title", "Unknown")),
-            track.get("artist", "Unknown"),
-            f"{track.get('bpm', 0):.0f}" if track.get("bpm") else "—",
-            track.get("camelot", track.get("key", "—")),
-            self._format_duration(track.get("duration", 0)),
-            track.get("genre", track.get("parent_genre", "—")),
-            f"{track.get('energy', 0):.0%}" if track.get("energy") else "—",
-        ]
-
-        for i, (col_width, text) in enumerate(zip(self.column_widths[1:], col_data)):
+        # Columns — rendered per-column via _cell_text so any DJ-specific
+        # column (role, quality, ear, heart, mix, archive) displays correctly.
+        x = self.column_widths[0] - self._scroll_x  # Skip "#" column
+        for i, col_width in enumerate(self.column_widths[1:]):
             if x >= width:
                 break
             actual_width = min(col_width, width - x)
+            col_name = self.columns[i + 1]
+            text = self._cell_text(track, col_name)
             canvas.create_text(
                 x + 10, y + self.row_height // 2,
                 text=str(text)[:50],
@@ -446,6 +517,7 @@ class VirtualizedTrackTable(ctk.CTkFrame):
         self._draw_header()
         self._draw_rows()
         self._update_scrollbar()
+        self._update_h_scrollbar()
 
     def _on_canvas_click(self, event):
         """Handle click on row."""
@@ -522,6 +594,31 @@ class VirtualizedTrackTable(ctk.CTkFrame):
     def _on_canvas_scroll(self, *args):
         """Canvas scroll command (from scrollbar)."""
         self._on_scrollbar(*args)
+
+    def _on_h_scrollbar(self, *args):
+        """Horizontal scrollbar command."""
+        max_scroll = max(0, self._total_width() - self.canvas.winfo_width())
+        if args[0] == "moveto":
+            self._scroll_x = float(args[1]) * max_scroll
+        elif args[0] == "scroll":
+            self._scroll_x += int(args[1]) * 20
+        self._scroll_x = max(0, min(self._scroll_x, max_scroll))
+        self._draw_header()
+        self._draw_rows()
+
+    def _update_h_scrollbar(self):
+        """Update horizontal scrollbar position/visibility."""
+        width = self.canvas.winfo_width()
+        if width <= 1:
+            return
+        total = self._total_width()
+        if total <= width:
+            self.h_scrollbar.set(0, 1)
+        else:
+            self.h_scrollbar.set(
+                self._scroll_x / total,
+                (self._scroll_x + width) / total,
+            )
 
     def _update_scrollbar(self):
         """Update scrollbar position/visibility."""
@@ -614,6 +711,7 @@ class VirtualizedTrackTable(ctk.CTkFrame):
 
     def _get_col_at_x(self, x: int) -> Optional[int]:
         """Get column index at X coordinate."""
+        x += self._scroll_x
         col_x = 0
         for i, width in enumerate(self.column_widths):
             if col_x <= x < col_x + width:
@@ -653,13 +751,19 @@ class TrackTable(ctk.CTkFrame):
     Maintains same API as old Treeview-based TrackTable.
     """
 
-    def __init__(self, parent, on_select=None, on_double_click=None, on_right_click_action=None):
+    # Default columns mirror the original Treeview TrackTable so this is a
+    # true drop-in for the library/set builder/archive views.
+    DEFAULT_COLUMNS = ["#", "Title", "Genre", "Role", "BPM", "Key", "Quality",
+                       "Energy", "Ear", "Heart", "Mix", "Archive"]
+
+    def __init__(self, parent, on_select=None, on_double_click=None,
+                 on_right_click_action=None, columns=None):
         super().__init__(parent, fg_color=PANEL, corner_radius=12)
         self.configure(border_width=1, border_color=GLASS_BORDER)
 
         self.virtualized = VirtualizedTrackTable(
             self,
-            columns=["#", "Title", "Artist", "BPM", "Key", "Duration", "Genre", "Energy"],
+            columns=columns if columns is not None else self.DEFAULT_COLUMNS,
             on_select=on_select,
             on_double_click=on_double_click,
             on_right_click=lambda track, x, y: on_right_click_action and on_right_click_action(track),
