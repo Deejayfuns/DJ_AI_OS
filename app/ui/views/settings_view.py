@@ -2,6 +2,7 @@ import customtkinter as ctk
 
 from app.ui.theme import ACCENT, MUTED, PANEL, TEXT
 from app.ui.views.base import ViewBase
+from app.core.i18n import t, get_language, set_language, available_languages
 
 
 class SettingsView(ViewBase):
@@ -12,7 +13,7 @@ class SettingsView(ViewBase):
 
         win.make_section_title(
             parent,
-            "Settings",
+            t("sidebar.settings"),
             "Lisans durumu ve arsiv sinirlari."
         )
 
@@ -21,10 +22,40 @@ class SettingsView(ViewBase):
         stats = ctk.CTkFrame(parent, fg_color="transparent")
         stats.pack(fill="x")
 
-        win.make_metric(stats, "PLAN", plan.get("plan", "DEMO"))
+        win.make_metric(stats, t("common.version"), plan.get("plan", "DEMO"))
         win.make_metric(stats, "LICENSED", "YES" if plan.get("licensed") else "NO")
         win.make_metric(stats, "MAX TRACKS", plan.get("max_tracks", 0))
         win.make_metric(stats, "ARCHIVED", win.total_archived)
+
+        # Language selector
+        lang_frame = ctk.CTkFrame(parent, fg_color=PANEL, corner_radius=8)
+        lang_frame.pack(fill="x", pady=12)
+
+        ctk.CTkLabel(
+            lang_frame,
+            text=t("common.language"),
+            font=("Segoe UI", 14, "bold"),
+            text_color=ACCENT
+        ).pack(anchor="w", padx=12, pady=(12, 6))
+
+        current_lang = get_language()
+        lang_var = ctk.StringVar(value=current_lang)
+
+        def on_lang_change(choice):
+            if set_language(choice):
+                win.log(t("messages.language_changed", lang=choice))
+                # Rebuild sidebar to reflect language change
+                if hasattr(win, "sidebar"):
+                    win.sidebar._build()
+
+        lang_combo = ctk.CTkComboBox(
+            lang_frame,
+            values=[code for code, _ in available_languages()],
+            variable=lang_var,
+            command=on_lang_change,
+            width=150,
+        )
+        lang_combo.pack(anchor="w", padx=12, pady=(0, 12))
 
         shortcuts = ctk.CTkFrame(parent, fg_color=PANEL, corner_radius=8)
         shortcuts.pack(fill="x", pady=12)
@@ -51,6 +82,7 @@ class SettingsView(ViewBase):
             "Ctrl+2 Load selected to Deck B",
             "Ctrl+M AI Auto Mix Plan",
             "F5 Refresh current view",
+            "F11 Stage Mode (immersive fullscreen DJ)",
             "Duplicate dialog: 1 old delete, 2 duplicate folder, 3 keep both, Enter AI recommendation",
         ]
 

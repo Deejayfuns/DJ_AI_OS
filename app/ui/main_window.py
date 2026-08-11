@@ -1,5 +1,6 @@
 import os
 import math
+import time
 import threading
 from importlib.util import find_spec
 import tkinter as tk
@@ -10,6 +11,8 @@ try:
     import windnd
 except Exception:
     windnd = None
+
+from app.core.i18n import t, get_language, set_language, available_languages
 
 from app.ui.sidebar import Sidebar
 from app.ui.track_table import TrackTable
@@ -179,12 +182,523 @@ class MainWindow(ctk.CTk):
         self.scan_cancel_event = threading.Event()
         self.scan_thread = None
         self.is_scanning_library = False
+        self._shutting_down = False
 
         # ================= UI =================
         self.build()
 
+        self.after(900, self.welcome_captain)
+
         self.after(50, self.ui_consumer)
-        self.after(500, self.start_astra_listener)
+        # Astra listener disabled by default (PyAudio GIL crash on some systems)
+        # Enable manually via Settings or Ctrl+Shift+A
+        # self.after(500, self.start_astra_listener)
+
+        # ASTRA speaks a farewell when the captain shuts down the cabin
+        self.protocol("WM_DELETE_WINDOW", self._on_app_close)
+
+        # HUD entrance overlay peels away to reveal the live cabin
+        self.after(100, self._show_online_overlay)
+
+    # =====================================================
+    # ASTRA POWER DOWN — animated shutdown + farewell
+    # =====================================================
+    def _on_app_close(self):
+        """Cinematic power-down: a full-window overlay animates the cabin
+        shutting down while ASTRA speaks her farewell, then the window
+        tears down."""
+        if self._shutting_down:
+            return
+        self._shutting_down = True
+        self._speak_farewell()
+        try:
+            self._build_powerdown_overlay()
+        except Exception:
+            self.destroy()
+            return
+        self.after(1700, self.destroy)
+
+    def _speak_farewell(self):
+        """Fire-and-forget Turkish farewell through Windows SAPI so the
+        window can close instantly while the voice finishes on its own."""
+        try:
+            import subprocess
+            ps = (
+                "Add-Type -AssemblyName System.Speech;"
+                "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer;"
+                "try{$s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Female)}catch{};"
+                "$s.Rate=1;$s.Volume=90;"
+                "$s.Speak('Sistem kapaniyor kaptan. Gorusmek uzere.')"
+            )
+            subprocess.Popen(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+                creationflags=0x08000000, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+
+    def _build_powerdown_overlay(self):
+        """Full-window dark overlay: descending scanline + blinking status
+        while the cabin powers down."""
+        cv = tk.Canvas(self.main, bg="#07070C", highlightthickness=0)
+        cv.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._power_canvas = cv
+        self._pw_frame = 0
+        w = cv.winfo_width() or self.winfo_width() or 900
+        h = cv.winfo_height() or self.winfo_height() or 600
+        if w < 50 or h < 50:
+            w, h = 900, 600
+        self._pw_w, self._pw_h = w, h
+        cv.create_rectangle(10, 10, w - 10, h - 10, outline=RED, width=1)
+        cv.create_text(w // 2, h // 2 - 80, text="◈ ASTRA POWER DOWN ◈",
+                       fill=RED, font=("Segoe UI", 22, "bold"))
+        cv.create_text(w // 2, h // 2 - 44, text="SİSTEM KAPANIYOR",
+                       fill="#8A8A9A", font=("Consolas", 12, "bold"))
+        self._animate_power_down()
+
+    def _animate_power_down(self):
+        cv = getattr(self, "_power_canvas", None)
+        if cv is None:
+            return
+        try:
+            if not cv.winfo_exists():
+                return
+            w = max(cv.winfo_width(), 50)
+            h = max(cv.winfo_height(), 50)
+        except Exception:
+            return
+        cv.delete("pw_dyn")
+        f = self._pw_frame + 1
+        self._pw_frame = f
+
+        # descending scanline
+        y = (f * 12) % (h - 60) + 30
+        cv.create_rectangle(14, y, w - 14, y + 3, fill="#E63946",
+                            stipple="gray50", tags="pw_dyn")
+        cv.create_line(14, y - 12, w - 14, y - 12, fill="#5A0A12",
+                       tags="pw_dyn")
+
+        # blinking status
+        if (f // 5) % 2 == 0:
+            cv.create_text(w // 2, h // 2 + 24, text="● GÜÇ KESİLİYOR",
+                           fill=RED if (f // 3) % 2 else AMBER,
+                           font=("Consolas", 11, "bold"), tags="pw_dyn")
+        else:
+            cv.create_text(w // 2, h // 2 + 24, text="● GÜÇ KESİLİYOR",
+                           fill="#3A3A46", font=("Consolas", 11, "bold"),
+                           tags="pw_dyn")
+
+        cv.after(30, self._animate_power_down)
+
+    # =====================================================
+    # ASTRA ONLINE — HUD entrance overlay after boot
+    # =====================================================
+    def _show_online_overlay(self):
+        """Brief HUD-styled 'ASTRA ONLINE' reveal that peels away to
+        expose the live cabin + captain greeting."""
+        try:
+            ov = tk.Canvas(self.main, bg="#07070C", highlightthickness=0)
+            ov.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self._online_canvas = ov
+            self._online_frame = 0
+            try:
+                self.update_idletasks()
+                w = ov.winfo_width()
+                h = ov.winfo_height()
+            except Exception:
+                w, h = 0, 0
+            if w < 50 or h < 50:
+                w = self.winfo_width() or 900
+                h = self.winfo_height() or 600
+            self._animate_online_overlay()
+        except Exception:
+            pass
+
+    def _animate_online_overlay(self):
+        ov = getattr(self, "_online_canvas", None)
+        if ov is None:
+            return
+        try:
+            if not ov.winfo_exists():
+                return
+            w = max(ov.winfo_width(), 50)
+            h = max(ov.winfo_height(), 50)
+        except Exception:
+            return
+        f = self._online_frame + 1
+        self._online_frame = f
+        ov.delete("all")
+        cx, cy = w // 2, h // 2
+
+        # HUD corner brackets inherited from the boot frame
+        b = 34
+        for x1, y1, x2, y2 in ((10, 10, b, 10), (10, 10, 10, b),
+                               (w - 10, 10, w - b, 10), (w - 10, 10, w - 10, b),
+                               (10, h - 10, b, h - 10), (10, h - 10, 10, h - b),
+                               (w - 10, h - 10, w - b, h - 10),
+                               (w - 10, h - 10, w - 10, h - b)):
+            ov.create_line(x1, y1, x2, y2, fill=RED, width=2)
+
+        # pulsing ring around the wordmark
+        pulse = 0.6 + 0.4 * math.sin(f * 0.14)
+        ov.create_oval(cx - 130 * pulse, cy - 64 * pulse,
+                       cx + 130 * pulse, cy + 64 * pulse,
+                       outline="#E63946" if (f // 12) % 2 else "#5A0A12",
+                       width=2)
+
+        # glow text (underglow layer first, bright on top)
+        glow = 0.5 + 0.5 * math.sin(f * 0.18)
+        ov.create_text(cx, cy - 6, text="ASTRA ONLINE",
+                       fill="#5A0A12", font=("Segoe UI", 40, "bold"))
+        ov.create_text(cx, cy - 6, text="ASTRA ONLINE",
+                       fill=f"#{int(150 + 105 * glow):02x}"
+                            f"{int(20 + 30 * glow):02x}"
+                            f"{int(26 + 34 * glow):02x}",
+                       font=("Segoe UI", 38, "bold"))
+        ov.create_text(cx, cy + 40, text="◈ TÜM SİSTEMLER ÇEVRİMİÇİ ◈",
+                       fill=GREEN, font=("Consolas", 11, "bold"))
+        ov.create_text(cx, cy + 68, text="Kaptan, kabin hazır.",
+                       fill="#8A8A9A", font=("Consolas", 10))
+        ov.create_text(20, 22, anchor="w", text="ASTRA OS  ▸ v3",
+                       fill="#5A5A6A", font=("Consolas", 9))
+
+        if f < 60:
+            ov.after(30, self._animate_online_overlay)
+        else:
+            # peel: brief green flash, then the canvas vanishes and the
+            # live cabin (with the captain greeting) is revealed
+            ov.delete("all")
+            ov.create_rectangle(0, 0, w, h, fill="#07070C")
+            ov.create_text(cx, cy, text="ÇEVRİMİÇİ",
+                           fill=GREEN, font=("Segoe UI", 26, "bold"))
+            ov.after(140, ov.destroy)
+
+    # =====================================================
+    # PERSISTENT HUD — live telemetry frame (runs forever)
+    # =====================================================
+    def _animate_hud(self):
+        """Persistent sci-fi HUD: corner brackets, scanline sweep, clock,
+        system telemetry strip, view indicator, audio engine status,
+        network status, GPU metrics, mini waveform, particle field.
+        Runs continuously as long as the window exists."""
+        cv = getattr(self, "_hud_canvas", None)
+        if cv is None:
+            return
+        try:
+            if not cv.winfo_exists():
+                return
+            w = max(cv.winfo_width(), 100)
+            h = max(cv.winfo_height(), 100)
+        except Exception:
+            return
+
+        f = self._hud_frame + 1
+        self._hud_frame = f
+        cv.delete("hud")
+
+        # In stage mode, collapse the HUD to a minimal pulse dot so the
+        # fullscreen performance view stays clean (F11 toggles).
+        if getattr(self, "_stage_mode", False):
+            pulse_dot = 0.5 + 0.5 * math.sin(f * 0.15)
+            dot_col = f"#{int(46 + 209 * pulse_dot):02x}{int(204 + 51 * pulse_dot):02x}{int(113 + 142 * pulse_dot):02x}"
+            cv.create_oval(w - 14, 14, w - 4, 24, fill=dot_col,
+                           outline="", tags="hud")
+            cv.create_text(w - 12, 30, text="STAGE", fill="#4A4A5A",
+                           font=("Consolas", 7), anchor="e", tags="hud")
+            cv.after(50, self._animate_hud)
+            return
+
+        # Initialize particle field on first frame
+        if not hasattr(self, "_hud_particles"):
+            self._hud_particles = []
+            import random
+            for _ in range(24):
+                self._hud_particles.append({
+                    'x': random.uniform(20, w - 20),
+                    'y': random.uniform(20, h - 20),
+                    'vx': random.uniform(-0.3, 0.3),
+                    'vy': random.uniform(-0.2, 0.2),
+                    'size': random.uniform(1, 3),
+                    'alpha': random.uniform(0.15, 0.45),
+                    'color': random.choice(['#E63946', '#2ECC71', '#3498DB', '#F39C12', '#9B59B6'])
+                })
+
+        # corner targeting brackets (boot HUD style) - with animated corners
+        b = 34 + int(3 * math.sin(f * 0.08))
+        for x1, y1, x2, y2 in ((10, 10, b, 10), (10, 10, 10, b),
+                               (w - 10, 10, w - b, 10), (w - 10, 10, w - 10, b),
+                               (10, h - 10, b, h - 10), (10, h - 10, 10, h - b),
+                               (w - 10, h - 10, w - b, h - 10),
+                               (w - 10, h - 10, w - 10, h - b)):
+            cv.create_line(x1, y1, x2, y2, fill=RED, width=2, tags="hud")
+
+        # secondary inner brackets (dimmed)
+        ib = 22
+        for x1, y1, x2, y2 in ((18, 18, ib + 18, 18), (18, 18, 18, ib + 18),
+                               (w - 18, 18, w - ib - 18, 18), (w - 18, 18, w - 18, ib + 18),
+                               (18, h - 18, ib + 18, h - 18), (18, h - 18, 18, h - ib - 18),
+                               (w - 18, h - 18, w - ib - 18, h - 18),
+                               (w - 18, h - 18, w - 18, h - ib - 18)):
+            cv.create_line(x1, y1, x2, y2, fill="#3A1A1A", width=1, tags="hud")
+
+        # animated particle field (subtle atmospheric effect)
+        import random
+        for p in self._hud_particles:
+            p['x'] += p['vx']
+            p['y'] += p['vy']
+            # wrap around
+            if p['x'] < 15: p['x'] = w - 15
+            if p['x'] > w - 15: p['x'] = 15
+            if p['y'] < 15: p['y'] = h - 15
+            if p['y'] > h - 15: p['y'] = 15
+            # subtle pulsing
+            pulse = 0.5 + 0.5 * math.sin(f * 0.03 + p['x'] * 0.01)
+            alpha = int(p['alpha'] * 255 * pulse)
+            r = int(p['color'][1:3], 16)
+            g = int(p['color'][3:5], 16)
+            b_col = int(p['color'][5:7], 16)
+            col = f"#{r:02x}{g:02x}{b_col:02x}"
+            cv.create_oval(p['x'] - p['size'], p['y'] - p['size'],
+                           p['x'] + p['size'], p['y'] + p['size'],
+                           fill=col, outline="", tags="hud")
+
+        # horizontal scanline sweep (subtle, boot aesthetic)
+        self._hud_scanline_y = (self._hud_scanline_y + 2) % (h - 20) + 10
+        cv.create_line(14, self._hud_scanline_y, w - 14, self._hud_scanline_y,
+                       fill="#E63946", stipple="gray25", tags="hud")
+
+        # secondary scanline (faster, dimmer)
+        self._hud_scanline_y2 = getattr(self, '_hud_scanline_y2', h - 20)
+        self._hud_scanline_y2 = (self._hud_scanline_y2 + 3) % (h - 20) + 10
+        cv.create_line(14, self._hud_scanline_y2, w - 14, self._hud_scanline_y2,
+                       fill="#2ECC71", stipple="gray12", tags="hud")
+
+        # live clock top-center
+        import time
+        clock = time.strftime("%H:%M:%S")
+        date_str = time.strftime("%d.%m.%Y")
+        cv.create_text(w // 2, 14, text=date_str, fill="#5A5A6A",
+                       font=("Consolas", 8), tags="hud")
+        cv.create_text(w // 2, 26, text=clock, fill="#8A8A9A",
+                       font=("Consolas", 11, "bold"), tags="hud")
+
+        # telemetry strip top-right (CPU, MEM, NET, GPU)
+        try:
+            import psutil
+            cpu = psutil.cpu_percent(interval=None)
+            mem = psutil.virtual_memory().percent
+            # network
+            net_io = psutil.net_io_counters()
+            net_sent = net_io.bytes_sent / 1024 if net_io else 0
+            net_recv = net_io.bytes_recv / 1024 if net_io else 0
+            tel = f"CPU {cpu:4.1f}%  MEM {mem:4.1f}%"
+            net_str = f"↑{net_sent:.0f}KB ↓{net_recv:.0f}KB"
+        except Exception:
+            tel = "CPU ----  MEM ----"
+            net_str = "NET ----"
+
+        cv.create_text(w - 16, 14, text=tel, fill="#6A6A7A",
+                       font=("Consolas", 8), anchor="e", tags="hud")
+        cv.create_text(w - 16, 26, text=net_str, fill="#4A6A5A",
+                       font=("Consolas", 8), anchor="e", tags="hud")
+
+        # audio engine status top-left
+        audio_status = "AUDIO: READY"
+        audio_color = "#2ECC71"
+        try:
+            if hasattr(self, 'playback') and self.playback:
+                if getattr(self.playback, 'playing', False):
+                    audio_status = "AUDIO: PLAYING"
+                    audio_color = "#3498DB"
+                elif getattr(self.playback, 'index', 0) > 0:
+                    audio_status = "AUDIO: QUEUED"
+                    audio_color = "#F39C12"
+        except Exception:
+            audio_status = "AUDIO: ----"
+            audio_color = "#6A6A7A"
+
+        cv.create_text(16, 14, text=audio_status, fill=audio_color,
+                       font=("Consolas", 8, "bold"), anchor="w", tags="hud")
+
+        # deck status (if available)
+        deck_str = "DECKS: A:--- B:---"
+        deck_color = "#5A5A6A"
+        try:
+            if hasattr(self, 'deck_engine') and self.deck_engine:
+                deck_a = self.deck_engine.decks.get("A", {}).get("track") if hasattr(self.deck_engine, 'decks') else None
+                deck_b = self.deck_engine.decks.get("B", {}).get("track") if hasattr(self.deck_engine, 'decks') else None
+                a_name = (deck_a.get('name') or '---')[:12] if deck_a else '---'
+                b_name = (deck_b.get('name') or '---')[:12] if deck_b else '---'
+                deck_str = f"DECKS: A:{a_name} B:{b_name}"
+                if deck_a or deck_b:
+                    deck_color = "#2ECC71"
+        except Exception:
+            pass
+        cv.create_text(16, 26, text=deck_str, fill=deck_color,
+                       font=("Consolas", 8), anchor="w", tags="hud")
+
+        # current view indicator bottom-left
+        view = getattr(self, "current_view", "dashboard").upper()
+        cv.create_text(16, h - 28, text=f"VIEW: {view}", fill="#5A5A6A",
+                       font=("Consolas", 9), anchor="w", tags="hud")
+
+        # library stats bottom-left (above view)
+        lib_count = len(getattr(self, 'library', []))
+        archived = getattr(self, 'total_archived', 0)
+        cv.create_text(16, h - 42, text=f"LIB: {lib_count}  ARC: {archived}", fill="#4A4A5A",
+                       font=("Consolas", 8), anchor="w", tags="hud")
+
+        # frame time bottom-right (ms)
+        frame_ms = getattr(self, "_frame_ms", 0)
+        cv.create_text(w - 16, h - 16, text=f"{frame_ms:.1f} ms", fill="#5A5A6A",
+                       font=("Consolas", 9), anchor="e", tags="hud")
+
+        # FPS indicator
+        fps = 1000.0 / frame_ms if frame_ms > 0 else 0
+        cv.create_text(w - 16, h - 30, text=f"{fps:.0f} FPS", fill="#4A4A5A",
+                       font=("Consolas", 8), anchor="e", tags="hud")
+
+        # ASTRA status bottom-center (pulsing with more sophisticated animation)
+        pulse = 0.5 + 0.5 * math.sin(f * 0.12)
+        pulse2 = 0.5 + 0.5 * math.sin(f * 0.07 + 1.5)
+        r = int(46 + 209 * pulse)
+        g = int(204 + 51 * pulse2)
+        b_col = int(113 + 142 * pulse)
+        col = f"#{r:02x}{g:02x}{b_col:02x}"
+
+        # status text changes based on system state
+        if hasattr(self, 'is_playing') and self.is_playing:
+            status_text = "◈ ASTRA LIVE ◈"
+        elif hasattr(self, 'astra_active') and self.astra_active:
+            status_text = "◈ ASTRA ACTIVE ◈"
+        else:
+            status_text = "◈ ASTRA ONLINE ◈"
+
+        cv.create_text(w // 2, h - 16, text=status_text, fill=col,
+                       font=("Consolas", 9, "bold"), tags="hud")
+
+        # current language bottom-center (above ASTRA status)
+        lang = get_language().upper()
+        cv.create_text(w // 2, h - 32, text=f"LANG: {lang}", fill="#4A4A5A",
+                       font=("Consolas", 8), tags="hud")
+
+        # mini waveform preview (bottom-center, above lang) - shows current track waveform
+        if hasattr(self, 'selected_track') and self.selected_track:
+            wf = self.selected_track.get('waveform')
+            if wf and len(wf) > 10:
+                # draw mini waveform
+                pts = wf[::max(1, len(wf) // 120)]  # downsample to ~120 points
+                cx = w // 2
+                cy = h - 58
+                for i, v in enumerate(pts):
+                    x = cx - 60 + i
+                    h_bar = int(v * 20)
+                    cv.create_line(x, cy, x, cy - h_bar, fill="#E63946", width=1, tags="hud")
+                    cv.create_line(x, cy, x, cy + h_bar, fill="#E63946", width=1, tags="hud")
+
+        # BPM/Key indicator if track selected
+        if hasattr(self, 'selected_track') and self.selected_track:
+            bpm = self.selected_track.get('bpm', 0)
+            key = self.selected_track.get('key', '')
+            if bpm:
+                cv.create_text(w // 2, h - 72, text=f"BPM: {bpm:.1f}  KEY: {key}", fill="#3498DB",
+                               font=("Consolas", 8, "bold"), tags="hud")
+
+        # Energy meter (circular, right side)
+        try:
+            energy = 0.5 + 0.3 * math.sin(f * 0.15)
+            if hasattr(self, 'selected_track') and self.selected_track:
+                energy = self.selected_track.get('energy', 0.5)
+            cx_e = w - 40
+            cy_e = h // 2
+            r_outer = 28
+            r_inner = 22
+            # background ring
+            cv.create_oval(cx_e - r_outer, cy_e - r_outer,
+                           cx_e + r_outer, cy_e + r_outer,
+                           outline="#2A2A3A", width=2, tags="hud")
+            # energy arc
+            angle = int(energy * 360)
+            cv.create_arc(cx_e - r_outer, cy_e - r_outer,
+                          cx_e + r_outer, cy_e + r_outer,
+                          start=90, extent=-angle, outline="#2ECC71", width=3, style="arc", tags="hud")
+            cv.create_text(cx_e, cy_e, text=f"{int(energy*100)}%", fill="#2ECC71",
+                           font=("Consolas", 8, "bold"), tags="hud")
+            cv.create_text(cx_e, cy_e + 36, text="ENERGY", fill="#4A4A5A",
+                           font=("Consolas", 7), tags="hud")
+        except Exception:
+            pass
+
+        cv.after(50, self._animate_hud)
+
+    # =====================================================
+    # VIEW TRANSITION — HUD light sweep on view change
+    # =====================================================
+    def _play_view_transition(self):
+        """Brief HUD-style horizontal light sweep across the screen
+        whenever the captain switches views. Fast, non-blocking."""
+        try:
+            parent = getattr(self, "main", None)
+            if parent is None or not parent.winfo_exists():
+                return
+            w = parent.winfo_width() or self.winfo_width() or 900
+            h = parent.winfo_height() or self.winfo_height() or 600
+            if w < 50 or h < 50:
+                return
+
+            if getattr(self, "_view_transition_canvas", None):
+                try:
+                    self._view_transition_canvas.destroy()
+                except Exception:
+                    pass
+
+            cv = tk.Canvas(parent, bg=BG, highlightthickness=0)
+            cv.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self._view_transition_canvas = cv
+            self._vt_frame = 0
+            self._vt_w, self._vt_h = w, h
+            self._animate_view_transition()
+        except Exception:
+            pass
+
+    def _animate_view_transition(self):
+        cv = getattr(self, "_view_transition_canvas", None)
+        if cv is None:
+            return
+        try:
+            if not cv.winfo_exists():
+                return
+        except Exception:
+            return
+        f = self._vt_frame + 1
+        self._vt_frame = f
+        cv.delete("all")
+        w, h = self._vt_w, self._vt_h
+
+        # expanding horizontal light bar sweeping left → right
+        sweep_x = (f * w) / 24
+        cv.create_rectangle(0, 0, w, h, fill=BG)
+        cv.create_rectangle(sweep_x, 0, sweep_x + 6, h, fill="#E63946")
+        cv.create_rectangle(sweep_x - 40, 0, sweep_x, h, fill="#8B2530")
+        cv.create_rectangle(sweep_x + 6, 0, sweep_x + 46, h, fill="#8B2530")
+
+        # thin green tracer line behind
+        cv.create_line(max(0, sweep_x - 90), h // 2,
+                       max(0, sweep_x - 20), h // 2,
+                       fill="#2ECC71", width=1)
+
+        # view name caption riding with the sweep
+        view = getattr(self, "current_view", "dashboard").upper()
+        cv.create_text(min(sweep_x, w - 20), h // 2, text=view,
+                       fill="#8A8A9A", font=("Consolas", 12, "bold"),
+                       anchor="e")
+
+        if f < 24:
+            cv.after(16, self._animate_view_transition)
+        else:
+            cv.destroy()
+            self._view_transition_canvas = None
 
     # =====================================================
     # LOG SYSTEM
@@ -201,7 +715,7 @@ class MainWindow(ctk.CTk):
             self.after(
                 0,
                 lambda m=activity: self.ai_activity.configure(
-                    text=f"AI ACTIVITY: {m}"
+                    text=f"{m}"
                 )
             )
 
@@ -228,6 +742,110 @@ class MainWindow(ctk.CTk):
         )
 
     # =====================================================
+    # CAPTAIN GREETING — boot result handed over in style
+    # =====================================================
+    def welcome_captain(self):
+        """Transient overlay card: real boot stats + hand the console
+        transcript into the AI log so the boot story continues in-app."""
+        try:
+            from app.core import system_probe as probe
+
+            # boot console transcript -> persistent log (continuity)
+            seen = getattr(self, "_boot_logged", 0)
+            lines = probe.transcript_lines()
+            for line, _color in lines[seen:]:
+                self.log(line)
+            self._boot_logged = len(lines)
+        except Exception:
+            pass
+
+        try:
+            self._build_welcome_card()
+        except Exception:
+            pass
+
+    def _build_welcome_card(self):
+        card = ctk.CTkFrame(self.main, fg_color=SURFACE, corner_radius=10,
+                            border_width=1, border_color=RED)
+        card.place(relx=0.5, rely=0.05, anchor="n", relwidth=0.64, relheight=0.34)
+        self._welcome_card = card
+
+        hdr = ctk.CTkFrame(card, fg_color="transparent")
+        hdr.pack(fill="x", padx=14, pady=(10, 2))
+        ctk.CTkLabel(hdr, text="✦ ASTRA", font=F_H3, text_color=BLUE_BRIGHT
+                     ).pack(side="left")
+        ctk.CTkLabel(hdr, text="SİSTEM AÇILIŞ RAPORU", font=F_H4,
+                     text_color=TEXT_SECONDARY).pack(side="left", padx=10)
+        ctk.CTkLabel(hdr, text="● ÇEVRİMİÇİ", font=F_META, text_color=GREEN
+                     ).pack(side="right")
+
+        ctk.CTkLabel(card, text="HOŞ GELDİN KAPTAN 🎧",
+                     font=("Segoe UI", 26, "bold"), text_color=TEXT_PRIMARY
+                     ).pack(anchor="w", padx=16, pady=(4, 2))
+        ctk.CTkLabel(card, text="Nöral çekirdek açıldı, kabin hazır. "
+                                "Kütüphanen ve donanımın seni bekliyor.",
+                     font=F_BODY, text_color=TEXT_SECONDARY
+                     ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        # live stats row
+        stats = self._boot_stats()
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=12)
+        for label, value, ok in stats:
+            cell = ctk.CTkFrame(row, fg_color=BG, corner_radius=6,
+                                border_width=1, border_color=BORDER)
+            cell.pack(side="left", fill="x", expand=True, padx=4)
+            ctk.CTkLabel(cell, text=label, font=F_META, text_color=TEXT_DIM
+                         ).pack(anchor="w", padx=8, pady=(6, 0))
+            ctk.CTkLabel(cell, text=value, font=("Consolas", 11, "bold"),
+                         text_color=GREEN if ok else AMBER
+                         ).pack(anchor="w", padx=8, pady=(0, 6))
+
+        ctk.CTkLabel(card, text="— Astro ile sohbet et, sahneyi kur ya da "
+                                "sıradaki parçayı sür. Karar senin. —",
+                     font=F_META, text_color=RED_DIM
+                     ).pack(anchor="w", padx=16, pady=(10, 8))
+
+        card.after(11000, card.destroy)
+
+    def _boot_stats(self):
+        """Cheap real stats for the greeting card (no blocking probes)."""
+        out = []
+
+        lib_n = len(self.saved_tracks or [])
+        out.append(("KÜTÜPHANE", f"{lib_n} parça", lib_n > 0))
+
+        plan = self.plan.get("plan", "DEMO")
+        licensed = bool(self.plan.get("licensed"))
+        out.append(("LİSANS", plan if licensed else "DEMO", licensed))
+
+        try:
+            import sounddevice as sd
+            dev = None
+            for d in sd.query_devices():
+                if d.get("max_output_channels", 0) > 0:
+                    dev = d.get("name", "ses")
+                    break
+            out.append(("SES", (dev or "—")[:22], dev is not None))
+        except Exception:
+            out.append(("SES", "—", False))
+
+        try:
+            import mido
+            ports = mido.get_input_names() + mido.get_output_names()
+            out.append(("MIDI", f"{len(ports)} port", len(ports) > 0))
+        except Exception:
+            out.append(("MIDI", "—", False))
+
+        from app.core.system_probe import _neural_model_path
+        if _neural_model_path():
+            out.append(("NÖRAL MODEL", "önbellekte", True))
+        else:
+            out.append(("NÖRAL MODEL", "ilk kullanımda eğitilecek", True))
+
+        return out
+
+    # =====================================================
     # UI BUILD
     # =====================================================
     def build(self):
@@ -237,58 +855,74 @@ class MainWindow(ctk.CTk):
         self.sidebar.pack(side="left", fill="y")
 
         # MAIN
-        self.main = ctk.CTkFrame(self, fg_color=BACKGROUND)
+        self.main = ctk.CTkFrame(self, fg_color=BG)
         self.main.pack(side="right", fill="both", expand=True)
 
-        # HEADER
-        header = ctk.CTkFrame(
-            self.main,
-            fg_color=GLASS_BG,
-            corner_radius=R_MED,
-            border_width=1,
-            border_color=GLASS_BORDER
+        # =====================================================
+        # PERSISTENT HUD OVERLAY — sci-fi telemetry frame
+        # =====================================================
+        self._hud_canvas = tk.Canvas(self.main, bg=BG, highlightthickness=0)
+        self._hud_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._hud_frame = 0
+        self._hud_scanline_y = 0
+        self._animate_hud()
+
+        # =====================================================
+        # HEADER — Pro DJ style (clean, single-line)
+        # =====================================================
+        header = ctk.CTkFrame(self.main, fg_color=SURFACE, corner_radius=0, height=48)
+        header.pack(fill="x", side="top")
+        header.pack_propagate(False)
+
+        # Left: Logo + version
+        left = ctk.CTkFrame(header, fg_color="transparent")
+        left.pack(side="left", padx=16, pady=8)
+
+        ctk.CTkLabel(
+            left, text="DJ AI OS", font=F_H3, text_color=RED
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            left, text=f"  {self.app_version}", font=F_META, text_color=TEXT_DIM
+        ).pack(side="left", padx=(4, 0))
+
+        # Separator
+        sep = ctk.CTkFrame(header, width=1, height=24, fg_color=BORDER)
+        sep.pack(side="left", padx=12)
+
+        # Center: Now playing info
+        self.now_playing_label = ctk.CTkLabel(
+            header, text="No track loaded", font=F_BODY, text_color=TEXT_SECONDARY
         )
-        header.pack(fill="x", padx=10, pady=10)
+        self.now_playing_label.pack(side="left", padx=8)
 
-        glow_line = ctk.CTkFrame(header, height=3, fg_color=NEON_PURPLE)
-        glow_line.pack(fill="x", padx=14, pady=(10, 0))
-
-        ctk.CTkLabel(
-            header,
-            text=f"DJ AI OS // {self.app_version}",
-            font=F_H1,
-            text_color=ACCENT
-        ).pack(anchor="w", padx=20, pady=(10, 0))
-
-        ctk.CTkLabel(
-            header,
-            text="NEON ARCHIVE COCKPIT | MIX MASTER ENGINE | AI PERFORMANCE BRAIN",
-            font=F_BODY_BOLD,
-            text_color=NEON_BLUE
-        ).pack(anchor="w", padx=22, pady=(0, 4))
-
+        # Right: Status
         self.status = ctk.CTkLabel(
-            header,
-            text=self.get_ready_status(),
-            text_color=NEON_MAGENTA,
-            font=F_BODY_BOLD
+            header, text=self.get_ready_status(), font=F_META, text_color=TEXT_DIM
         )
-        self.status.pack(anchor="w", padx=20, pady=(0, 10))
+        self.status.pack(side="right", padx=16)
 
+        # Activity line
         self.ai_activity = ctk.CTkLabel(
-            header,
-            text="AI ACTIVITY: Sistem hazir.",
-            text_color=ACCENT_SOFT,
-            font=F_BODY_BOLD,
-            anchor="w"
+            header, text="", font=F_META, text_color=TEXT_DIM, anchor="w"
         )
-        self.ai_activity.pack(fill="x", padx=20, pady=(0, 10))
+        self.ai_activity.pack(side="right", padx=8)
 
-        # DASHBOARD AREA
-        self.content = ctk.CTkScrollableFrame(self.main, fg_color="transparent")
-        self.content.pack(fill="both", expand=True, padx=10, pady=(10, 0))
+        # Bottom separator
+        sep_bottom = ctk.CTkFrame(self.main, height=1, fg_color=BORDER)
+        sep_bottom.pack(fill="x", side="top")
 
+        # =====================================================
+        # CONTENT AREA
+        # =====================================================
+        self.content = ctk.CTkScrollableFrame(self.main, fg_color="transparent",
+                                                scrollbar_button_color=SURFACE_RAISED,
+                                                scrollbar_button_hover_color=BORDER)
+        self.content.pack(fill="both", expand=True, padx=10, pady=(8, 0))
+
+        # =====================================================
         # MINI PLAYER (persistent bottom bar)
+        # =====================================================
         self.mini_player = MiniPlayer(
             self.main,
             on_play=self.toggle_playback,
@@ -334,10 +968,54 @@ class MainWindow(ctk.CTk):
             "<Control-m>": self.build_auto_mix_from_decks,
             "<F5>": self.refresh_current_view,
             "<Control-b>": lambda: self.set_view("dj_booth"),
+            "<Control-F11>": self.toggle_stage_mode,
+            "<F11>": self.toggle_stage_mode,
         }
 
         for key, command in shortcuts.items():
             self.bind_all(key, lambda _e, c=command: self.run_shortcut(c))
+
+    # =====================================================
+    # STAGE MODE — immersive fullscreen DJ performance
+    # =====================================================
+    def toggle_stage_mode(self):
+        """Enter/exit immersive fullscreen performance mode. In stage
+        mode the sidebar and header chrome collapse, leaving only the
+        DJ booth as a cinematic full-screen stage."""
+        self._stage_mode = not getattr(self, "_stage_mode", False)
+
+        if self._stage_mode:
+            # switch to DJ booth, hide chrome, go fullscreen
+            self.set_view("dj_booth")
+            try:
+                if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                    self.sidebar.pack_forget()
+            except Exception:
+                pass
+            try:
+                self.attributes("-fullscreen", True)
+            except Exception:
+                try:
+                    self.state("zoomed")
+                except Exception:
+                    pass
+            self.set_status("STAGE MODE ENGAGED — F11 ile cik")
+        else:
+            # restore chrome and window
+            try:
+                if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                    self.sidebar.pack(side="left", fill="y")
+            except Exception:
+                pass
+            try:
+                self.attributes("-fullscreen", False)
+            except Exception:
+                pass
+            try:
+                self.state("normal")
+            except Exception:
+                pass
+            self.set_status("STAGE MODE EXITED")
 
     def run_shortcut(self, command):
 
@@ -531,12 +1209,15 @@ class MainWindow(ctk.CTk):
 
     def set_view(self, view):
 
+        if getattr(self, "current_view", None) != view:
+            self._play_view_transition()
         self.current_view = view
         if view != "astra_chat":
             self.astra_active = False
         self.clear_content()
 
         builders = {
+            "performance_dash": self.build_performance_dashboard,
             "dashboard": self.build_dashboard,
             "library": self.build_library_view,
             "archive_guardian": self.build_archive_guardian_view,
@@ -559,6 +1240,10 @@ class MainWindow(ctk.CTk):
             "account": self.build_account_view,
             "settings": self.build_settings_view,
             "dj_booth": self.build_dj_booth_view,
+            "beat_studio": self.build_beat_studio_view,
+            "neural_synth": self.build_neural_synth_view,
+            "neural_bridge": self.build_neural_bridge_view,
+            "pioneer_link": self.build_pioneer_link_view,
             "dj_coach": self.build_dj_coach_view,
             "library_map": self.build_library_map_view,
             "smart_set": self.build_smart_set_view,
@@ -576,35 +1261,35 @@ class MainWindow(ctk.CTk):
         ctk.CTkLabel(
             box,
             text=title,
-            font=("Segoe UI", 24, "bold"),
-            text_color=TEXT
+            font=F_H2,
+            text_color=TEXT_PRIMARY
         ).pack(anchor="w")
 
         if subtitle:
             ctk.CTkLabel(
                 box,
                 text=subtitle,
-                font=("Segoe UI", 12),
-                text_color=MUTED
+                font=F_META,
+                text_color=TEXT_SECONDARY
             ).pack(anchor="w", pady=(2, 0))
 
     def make_metric(self, parent, label, value):
 
-        card = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=8)
+        card = ctk.CTkFrame(parent, fg_color=SURFACE, corner_radius=8, border_width=1, border_color=BORDER)
         card.pack(side="left", fill="x", expand=True, padx=5)
 
         ctk.CTkLabel(
             card,
             text=str(value),
-            font=("Segoe UI", 24, "bold"),
-            text_color=ACCENT
+            font=F_H2,
+            text_color=RED
         ).pack(anchor="w", padx=14, pady=(12, 0))
 
         ctk.CTkLabel(
             card,
             text=label,
-            font=("Segoe UI", 11),
-            text_color=MUTED
+            font=F_META,
+            text_color=TEXT_SECONDARY
         ).pack(anchor="w", padx=14, pady=(0, 12))
 
     def build_filter_bar(self, parent, tracks):
@@ -907,7 +1592,15 @@ class MainWindow(ctk.CTk):
         if hasattr(self, "voice_command_text"):
             text = self.voice_command_text.get()
 
-        result = self.voice_assistant.interpret_command(text)
+        # Build context for AstraBrain
+        context = {
+            "library": self.library or self.saved_tracks,
+            "tracks": self.current_set or self.library or self.saved_tracks,
+            "track": self.selected_track,
+            "path": self.selected_track.get("path") if self.selected_track else None,
+        }
+
+        result = self.voice_assistant.interpret_command(text, context=context)
         self.execute_voice_intent(result)
 
     def run_voice_mic_once(self):
@@ -1515,7 +2208,12 @@ class MainWindow(ctk.CTk):
         table_frame = ctk.CTkFrame(body, fg_color=PANEL)
         table_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
 
-        self.table = TrackTable(table_frame, on_select=self.on_track_selected)
+        self.table = TrackTable(
+            table_frame,
+            on_select=self.on_track_selected,
+            on_double_click=self.on_track_double_click,
+            on_right_click_action=self.on_track_right_click,
+        )
         self.table.pack(fill="both", expand=True, padx=6, pady=6)
 
         # RIGHT PANEL
@@ -1987,7 +2685,12 @@ class MainWindow(ctk.CTk):
         table_frame = ctk.CTkFrame(self.content, fg_color=PANEL)
         table_frame.pack(fill="both", expand=True)
 
-        self.table = TrackTable(table_frame, on_select=self.on_track_selected)
+        self.table = TrackTable(
+            table_frame,
+            on_select=self.on_track_selected,
+            on_double_click=self.on_track_double_click,
+            on_right_click_action=self.on_track_right_click,
+        )
         self.table.pack(fill="both", expand=True, padx=6, pady=6)
         self.populate_table(tracks)
 
@@ -2197,7 +2900,12 @@ class MainWindow(ctk.CTk):
         table_frame = ctk.CTkFrame(body, fg_color=PANEL)
         table_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
 
-        self.table = TrackTable(table_frame, on_select=self.on_track_selected)
+        self.table = TrackTable(
+            table_frame,
+            on_select=self.on_track_selected,
+            on_double_click=self.on_track_double_click,
+            on_right_click_action=self.on_track_right_click,
+        )
         self.table.pack(fill="both", expand=True, padx=6, pady=6)
         self.populate_table(self.library)
 
@@ -2257,7 +2965,12 @@ class MainWindow(ctk.CTk):
         table_frame = ctk.CTkFrame(self.content, fg_color=PANEL)
         table_frame.pack(fill="both", expand=True)
 
-        self.table = TrackTable(table_frame, on_select=self.on_track_selected)
+        self.table = TrackTable(
+            table_frame,
+            on_select=self.on_track_selected,
+            on_double_click=self.on_track_double_click,
+            on_right_click_action=self.on_track_right_click,
+        )
         self.table.pack(fill="both", expand=True, padx=6, pady=6)
         self.populate_table(source)
 
@@ -2339,7 +3052,12 @@ class MainWindow(ctk.CTk):
         table_frame = ctk.CTkFrame(self.content, fg_color=PANEL)
         table_frame.pack(fill="both", expand=True)
 
-        self.table = TrackTable(table_frame, on_select=self.on_track_selected)
+        self.table = TrackTable(
+            table_frame,
+            on_select=self.on_track_selected,
+            on_double_click=self.on_track_double_click,
+            on_right_click_action=self.on_track_right_click,
+        )
         self.table.pack(fill="both", expand=True, padx=6, pady=6)
         self.populate_table(source)
 
@@ -2395,7 +3113,12 @@ class MainWindow(ctk.CTk):
         table_frame = ctk.CTkFrame(self.content, fg_color=PANEL)
         table_frame.pack(fill="both", expand=True)
 
-        self.table = TrackTable(table_frame, on_select=self.on_track_selected)
+        self.table = TrackTable(
+            table_frame,
+            on_select=self.on_track_selected,
+            on_double_click=self.on_track_double_click,
+            on_right_click_action=self.on_track_right_click,
+        )
         self.table.pack(fill="both", expand=True, padx=6, pady=6)
         self.populate_table(source)
 
@@ -2652,51 +3375,23 @@ class MainWindow(ctk.CTk):
             ).pack(anchor="w", padx=18, pady=2)
 
     def build_deck_studio_view(self):
-
-        self.make_section_title(
-            self.content,
-            "Deck Studio",
-            "Deck A / Deck B yukle, preview planla ve AI Auto Mix talimati al."
-        )
-
-        controls = ctk.CTkFrame(self.content, fg_color=CARD, corner_radius=8)
-        controls.pack(fill="x", pady=(0, 10))
-
-        ctk.CTkButton(
-            controls,
-            text="LOAD SELECTED TO DECK A",
-            command=lambda: self.load_selected_to_deck("A")
-        ).pack(side="left", padx=8, pady=10)
-
-        ctk.CTkButton(
-            controls,
-            text="LOAD SELECTED TO DECK B",
-            command=lambda: self.load_selected_to_deck("B")
-        ).pack(side="left", padx=8, pady=10)
-
-        ctk.CTkButton(
-            controls,
-            text="AI AUTO MIX PLAN",
-            command=self.build_auto_mix_from_decks
-        ).pack(side="left", padx=8, pady=10)
-
-        self.deck_status_label = ctk.CTkLabel(
-            self.content,
-            text="Bir parca sec, Deck A/B'ye yukle.",
-            text_color=MUTED,
-            anchor="w"
-        )
-        self.deck_status_label.pack(fill="x", pady=(0, 10))
-
-        source = self.library or self.saved_tracks
-        self.build_filter_bar(self.content, source)
-
-        table_frame = ctk.CTkFrame(self.content, fg_color=PANEL)
-        table_frame.pack(fill="both", expand=True)
-
-        self.table = TrackTable(table_frame, on_select=self.on_track_selected)
-        self.table.pack(fill="both", expand=True, padx=6, pady=6)
-        self.populate_table(source)
+        """4-deck Virtual DJ / Rekordbox studio with Pioneer HID support."""
+        try:
+            from app.ui.deck_studio import DeckStudioPanel
+            self.deck_studio_panel = DeckStudioPanel(self.content, win=self)
+            self.deck_studio_panel.pack(fill="both", expand=True)
+            # make selected track load into the panel's selected deck
+            if hasattr(self, "selected_track") and self.selected_track:
+                try:
+                    self.deck_studio_panel.load_to_deck(
+                        self.deck_studio_panel.selected_deck, self.selected_track)
+                except Exception:
+                    pass
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            self.make_section_title(self.content, "Deck Studio",
+                                    f"Hata: {exc}")
 
     def load_selected_to_deck(self, deck_id):
 
@@ -3292,23 +3987,32 @@ class MainWindow(ctk.CTk):
 
         table_frame = ctk.CTkFrame(self.content, fg_color=PANEL)
         table_frame.pack(fill="both", expand=True)
-        self.table = TrackTable(table_frame, on_select=self.on_track_selected)
+        self.table = TrackTable(
+            table_frame,
+            on_select=self.on_track_selected,
+            on_double_click=self.on_track_double_click,
+            on_right_click_action=self.on_track_right_click,
+        )
         self.table.pack(fill="both", expand=True, padx=6, pady=6)
         self.populate_table(source)
 
     def build_astra_chat_view(self):
+        from app.ui.astra_chat import AstraChatPanel
+        panel = AstraChatPanel(self)
+        panel.build(self.content)
 
+    def build_astra_chat_view_old(self):
+        """Legacy chat view (kept for reference)."""
         self.make_section_title(
             self.content,
             "Astra Chat",
-            "Hologram asistanla konuş, kamera sahnesini incele ve DJ üretim fikirleri paylaş."
+            "Hologram asistanla konuş."
         )
 
         controls = ctk.CTkFrame(self.content, fg_color=CARD, corner_radius=8)
         controls.pack(fill="x", pady=(0, 10))
 
         self.jarvis_chat_input = StringVar(value="")
-        self.camera_preview_active = False
 
         ctk.CTkEntry(
             controls,
@@ -4240,7 +4944,12 @@ class MainWindow(ctk.CTk):
 
         table_frame = ctk.CTkFrame(self.content, fg_color=PANEL)
         table_frame.pack(fill="both", expand=True)
-        self.table = TrackTable(table_frame, on_select=self.on_track_selected)
+        self.table = TrackTable(
+            table_frame,
+            on_select=self.on_track_selected,
+            on_double_click=self.on_track_double_click,
+            on_right_click_action=self.on_track_right_click,
+        )
         self.table.pack(fill="both", expand=True, padx=6, pady=6)
         self.populate_table(source)
 
@@ -4313,16 +5022,25 @@ class MainWindow(ctk.CTk):
         tabs.add("Archive Packs")
         tabs.add("Current Export")
 
-        self.populate_trends_tab(tabs.tab("Trends"))
+        self._populate_trends_tab(tabs.tab("Trends"))
         self.populate_cloud_archive(tabs.tab("Archive Packs"), access)
 
         self.build_filter_bar(tabs.tab("Current Export"), source)
         table_frame = ctk.CTkFrame(tabs.tab("Current Export"), fg_color=PANEL)
         table_frame.pack(fill="both", expand=True)
 
-        self.table = TrackTable(table_frame, on_select=self.on_track_selected)
+        self.table = TrackTable(
+            table_frame,
+            on_select=self.on_track_selected,
+            on_double_click=self.on_track_double_click,
+            on_right_click_action=self.on_track_right_click,
+        )
         self.table.pack(fill="both", expand=True, padx=6, pady=6)
         self.populate_table(source)
+
+    def _populate_trends_tab(self, parent):
+        """Populate trends tab."""
+        ctk.CTkLabel(parent, text="Trends tab - implement populate_trends_tab", font=F_BODY).pack(padx=20, pady=20)
 
     def export_show_manifest(self):
 
@@ -4758,6 +5476,199 @@ class MainWindow(ctk.CTk):
     def build_settings_view(self):
 
         SettingsView(self).build(self.content)
+
+    def build_performance_dashboard(self):
+        from app.ui.performance_dashboard import PerformanceDashboard
+        dash = PerformanceDashboard(self)
+        dash.build(self.content)
+
+    def build_neural_synth_view(self):
+
+        self.make_section_title(
+            self.content,
+            "NEURAL SYNTH",
+            "Latent uzayda timbre morph — VAE ile ogrenilmis sesler, "
+            "yeni gövde, yeni perde"
+        )
+
+        try:
+            from app.ai.live_performance import LivePerformanceEngine
+            from app.ui.neural_synth_panel import NeuralSynthPanel
+            if not hasattr(self, "_neural_engine"):
+                self._neural_engine = LivePerformanceEngine(bpm=128,
+                                                            sample_rate=44100)
+                self._neural_engine.load_genre("house")
+            self.neural_panel = NeuralSynthPanel(
+                self.content, engine=self._neural_engine, win=self)
+            self.neural_panel.pack(fill="both", expand=True, pady=(0, 10))
+        except Exception as exc:
+            self.log(f"NEURAL SYNTH PANEL: {exc}")
+            import traceback
+            traceback.print_exc()
+
+    def build_neural_bridge_view(self):
+
+        self.make_section_title(
+            self.content,
+            "NEURAL BRIDGE",
+            "Iki parcayi ayirmadan birlestir — A'nin tinsidan B'ye eriyen "
+            "beat-senkron kopru"
+        )
+
+        try:
+            from app.ui.neural_bridge_panel import NeuralBridgePanel
+            self.neural_bridge_panel = NeuralBridgePanel(self.content, win=self)
+            self.neural_bridge_panel.pack(fill="both", expand=True, pady=(0, 10))
+        except Exception as exc:
+            self.log(f"NEURAL BRIDGE PANEL: {exc}")
+            import traceback
+            traceback.print_exc()
+
+    def build_pioneer_link_view(self):
+
+        self.make_section_title(
+            self.content,
+            "PIONEER LINK",
+            "Pioneer donanim + Rekordbox entegrasyonu — MIDI clock, "
+            "transport, canli FX ve donanimdan ogrenme"
+        )
+
+        try:
+            from app.ui.pioneer_link_panel import PioneerLinkPanel
+            self.pioneer_panel = PioneerLinkPanel(self.content, win=self)
+            self.pioneer_panel.pack(fill="both", expand=True, pady=(0, 10))
+        except Exception as exc:
+            self.log(f"PIONEER LINK PANEL: {exc}")
+            import traceback
+            traceback.print_exc()
+
+    def build_beat_studio_view(self):
+
+        self.make_section_title(
+            self.content,
+            "BEAT STUDIO",
+            "AI ile beat uret, duzenle, disari aktar"
+        )
+
+        from app.ai.beat_studio import BeatStudio
+        if not hasattr(self, '_beat_studio'):
+            self._beat_studio = BeatStudio()
+
+        # Command input
+        cmd_frame = ctk.CTkFrame(self.content, fg_color=SURFACE, corner_radius=8, border_width=1, border_color=BORDER)
+        cmd_frame.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(cmd_frame, text="BEAT COMMAND", font=F_H3, text_color=RED).pack(anchor="w", padx=12, pady=(10, 4))
+
+        input_row = ctk.CTkFrame(cmd_frame, fg_color="transparent")
+        input_row.pack(fill="x", padx=12, pady=(0, 10))
+
+        self.beat_command_entry = ctk.CTkEntry(
+            input_row, placeholder_text="128 BPM tech house beat yap...",
+            font=F_BODY, fg_color=BG, border_color=BORDER
+        )
+        self.beat_command_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.beat_command_entry.bind("<Return>", lambda e: self._run_beat_command())
+
+        ctk.CTkButton(input_row, text="GENERATE", fg_color=RED, hover_color=RED_HOVER,
+                       text_color="#FFF", font=F_BODY_BOLD, width=100,
+                       command=self._run_beat_command).pack(side="left")
+
+        # Quick buttons
+        quick_frame = ctk.CTkFrame(cmd_frame, fg_color="transparent")
+        quick_frame.pack(fill="x", padx=12, pady=(0, 10))
+
+        for label, cmd in [("House 128", "128 BPM house beat"), ("Techno 135", "135 BPM techno beat"),
+                           ("DnB 172", "172 BPM dnb beat"), ("Trap 140", "140 BPM trap beat"),
+                           ("Afro 122", "122 BPM afro house beat"), ("MARS 130", "130 BPM mars beat")]:
+            ctk.CTkButton(quick_frame, text=label, fg_color=SURFACE_RAISED, hover_color=BORDER,
+                          text_color=TEXT_SECONDARY, font=F_META, width=90,
+                          command=lambda c=cmd: (self.beat_command_entry.delete(0, "end"),
+                                                  self.beat_command_entry.insert(0, c),
+                                                  self._run_beat_command())).pack(side="left", padx=3)
+
+        # Result area (compact — DAW gets the expand)
+        self.beat_result_frame = ctk.CTkFrame(self.content, fg_color=SURFACE, corner_radius=8, border_width=1, border_color=BORDER)
+        self.beat_result_frame.pack(fill="x", pady=(0, 8))
+
+        # FULL DAW — pattern sequencer + piano roll + arrangement + mixer
+        try:
+            from app.ui.beat_studio_daw import DAWPanel
+            self.daw_panel = DAWPanel(self.content, win=self)
+            self.daw_panel.pack(fill="both", expand=True, pady=(0, 10))
+            self._beat_studio = getattr(self, "_beat_studio", None)
+            if self._beat_studio and hasattr(self._beat_studio, "last_project"):
+                try:
+                    self.daw_panel.project = self._beat_studio.last_project
+                    self.daw_panel.engine.project = self._beat_studio.last_project
+                    self.daw_panel.engine.mark_dirty()
+                    self.daw_panel._refresh_all()
+                except Exception:
+                    pass
+        except Exception as exc:
+            self.log(f"DAW PANEL: {exc}")
+            import traceback
+            traceback.print_exc()
+
+        self.beat_result_label = ctk.CTkLabel(
+            self.beat_result_frame, text="Beat komutu bekleniyor...",
+            font=F_META, text_color=TEXT_DIM, wraplength=800, justify="left"
+        )
+        self.beat_result_label.pack(anchor="w", padx=12, pady=10)
+
+        # Export buttons
+        export_frame = ctk.CTkFrame(self.content, fg_color=SURFACE, corner_radius=8, border_width=1, border_color=BORDER)
+        export_frame.pack(fill="x")
+
+        ctk.CTkButton(export_frame, text="EXPORT MIX WAV", fg_color=RED, text_color="#FFF",
+                       command=lambda: self._export_beat("mix")).pack(side="left", padx=8, pady=8)
+        ctk.CTkButton(export_frame, text="EXPORT STEMS", fg_color=SURFACE_RAISED, text_color=TEXT_PRIMARY,
+                       command=lambda: self._export_beat("stems")).pack(side="left", padx=8, pady=8)
+        ctk.CTkButton(export_frame, text="EXPORT PRO 24-bit", fg_color=SURFACE_RAISED, text_color=TEXT_PRIMARY,
+                       command=lambda: self._export_beat("pro")).pack(side="left", padx=8, pady=8)
+
+    def _run_beat_command(self):
+        cmd = self.beat_command_entry.get()
+        if not cmd:
+            return
+        from app.ai.beat_studio import BeatStudio
+        if not hasattr(self, '_beat_studio'):
+            self._beat_studio = BeatStudio()
+        result = self._beat_studio.generate(cmd)
+        self.beat_result_label.configure(
+            text=f"Genre: {result['genre'].replace('_', ' ').title()} | BPM: {result['bpm']} | "
+                 f"Bars: {result['bars']} | Duration: {result['duration']:.1f}s | "
+                 f"Instruments: {', '.join(result['stems'].keys())}"
+        )
+        # Push into the DAW panel so the user can edit the pattern/piano roll
+        if hasattr(self, "daw_panel"):
+            try:
+                self.daw_panel.from_beat_result(result)
+            except Exception as exc:
+                self.log(f"DAW sync: {exc}")
+        # Preview the beat so the user actually hears it
+        played = self._beat_studio.preview(result)
+        if played:
+            self.set_status(f"BEAT GENERATED + PREVIEW: {result['genre']} @ {result['bpm']} BPM")
+        else:
+            self.set_status(f"BEAT GENERATED: {result['genre']} @ {result['bpm']} BPM")
+
+    def _export_beat(self, mode):
+        if not hasattr(self, '_beat_studio') or not self._beat_studio.last_result:
+            self.set_status("Once bir beat olustur.")
+            return
+        import os
+        os.makedirs("DJ_EXPORTS", exist_ok=True)
+        result = self._beat_studio.last_result
+        if mode == "stems":
+            path = self._beat_studio.export_stems(result, "DJ_EXPORTS/stems")
+            self.set_status(f"STEMS EXPORTED: {list(path.keys())}")
+        elif mode == "pro":
+            path = self._beat_studio.export_pro_wav(result, f"DJ_EXPORTS/{result['genre']}_{result['bpm']}bpm_pro.wav", bit_depth=24)
+            self.set_status(f"PRO WAV EXPORTED: {path}")
+        else:
+            path = self._beat_studio.export_mix(result, f"DJ_EXPORTS/{result['genre']}_{result['bpm']}bpm_mix.wav")
+            self.set_status(f"MIX EXPORTED: {path}")
 
     def _update_stats_bar(self):
         """Update the bottom stats bar with current library info."""
@@ -5427,8 +6338,9 @@ class MainWindow(ctk.CTk):
     # =====================================================
     def play_set(self):
 
+        # Use visible tracks (library or saved_tracks from DB)
         if not self.current_set:
-            self.current_set = self.library
+            self.current_set = self.get_visible_tracks()
 
         if not self.current_set:
             show_toast("Oynatilacak parca yok", "warning")
@@ -5472,11 +6384,14 @@ class MainWindow(ctk.CTk):
     # =====================================================
     def ui_consumer(self):
 
+        t0 = time.perf_counter()
+
         track = self.queue.get()
 
         if track:
             self.after(0, lambda t=track: self.add_track_to_ui(t))
 
+        self._frame_ms = (time.perf_counter() - t0) * 1000.0
         self.after(50, self.ui_consumer)
 
     def add_track_to_ui(self, track):
@@ -5525,6 +6440,75 @@ class MainWindow(ctk.CTk):
                 text = f"{text} | DJ Heart: {heart}"
 
             self.transition_box.configure(text=text)
+
+    def on_track_double_click(self, track):
+        """Double-click on a track: play from this track in the current context (Rekordbox style)."""
+        self.selected_track = track
+        self.resolve_track_audio_path(track)
+
+        # Determine the playable list: current_set > filtered visible tracks > library
+        playable_list = []
+        if self.current_set:
+            playable_list = self.current_set
+        elif hasattr(self, "table") and self.table.winfo_exists():
+            # Use currently filtered/visible tracks
+            playable_list = self.filtered_tracks(self.active_table_source) if self.active_table_source else []
+        if not playable_list:
+            playable_list = self.library or self.saved_tracks or []
+
+        # Find index of clicked track in playable list
+        start_index = 0
+        for i, t in enumerate(playable_list):
+            if t.get("id") == track.get("id") or t.get("path") == track.get("path"):
+                start_index = i
+                break
+
+        # Play from this track onward
+        self.current_set = playable_list[start_index:]
+        self.is_playing = True
+        self.mini_player.set_playing(True)
+        self.mini_player.update_track(track)
+        self.playback.play(self.current_set)
+        self.set_status(f"CALIYOR: {track.get('name', '?')}")
+        show_toast(f"CALIYOR: {track.get('name', '?')[:40]}", "info")
+
+    def on_track_right_click(self, action, track):
+        """Handle right-click context menu actions."""
+        self.selected_track = track
+
+        if action == "play":
+            self.on_track_double_click(track)
+
+        elif action == "load_a":
+            self.deck_engine.load("A", track)
+            self.set_status(f"DECK A: {track.get('name', '?')[:40]}")
+            show_toast(f"Deck A'ya yuklendi: {track.get('name', '?')[:30]}", "info")
+            if hasattr(self, "deck_status_label") and self.deck_status_label:
+                self.update_deck_status()
+
+        elif action == "load_b":
+            self.deck_engine.load("B", track)
+            self.set_status(f"DECK B: {track.get('name', '?')[:40]}")
+            show_toast(f"Deck B'ye yuklendi: {track.get('name', '?')[:30]}", "info")
+            if hasattr(self, "deck_status_label") and self.deck_status_label:
+                self.update_deck_status()
+
+        elif action == "add_set":
+            self.current_set.append(track)
+            self.set_status(f"SET'E EKLENDI: {track.get('name', '?')[:40]} ({len(self.current_set)} parca)")
+            show_toast(f"Sete eklendi: {len(self.current_set)} parca", "success")
+
+        elif action == "info":
+            # Show track info in status
+            info = (
+                f"{track.get('name', '?')} | "
+                f"BPM: {track.get('bpm', '?')} | "
+                f"KEY: {track.get('camelot', track.get('key', '?'))} | "
+                f"ENERGY: {track.get('energy', 0):.2f} | "
+                f"GENRE: {track.get('genre', '?')} | "
+                f"VERSION: {track.get('version_type', '?')}"
+            )
+            self.set_status(info)
 
     def request_waveform_analysis(self, track):
 
