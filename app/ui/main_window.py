@@ -6391,6 +6391,19 @@ class MainWindow(ctk.CTk):
         if track:
             self.after(0, lambda t=track: self.add_track_to_ui(t))
 
+        # throttled live refresh for the DJ booth (every ~500ms)
+        self._ui_consumer_tick = getattr(self, "_ui_consumer_tick", 0) + 1
+        if self._ui_consumer_tick % 10 == 0:
+            if (
+                self.current_view == "dj_booth"
+                and hasattr(self, "dj_booth")
+                and getattr(self.dj_booth, "refresh", None)
+            ):
+                try:
+                    self.dj_booth.refresh()
+                except Exception:
+                    pass
+
         self._frame_ms = (time.perf_counter() - t0) * 1000.0
         self.after(50, self.ui_consumer)
 
