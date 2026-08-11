@@ -404,7 +404,7 @@ class MainWindow(ctk.CTk):
             dot_col = f"#{int(46 + 209 * pulse_dot):02x}{int(204 + 51 * pulse_dot):02x}{int(113 + 142 * pulse_dot):02x}"
             cv.create_oval(w - 14, 14, w - 4, 24, fill=dot_col,
                            outline="", tags="hud")
-            cv.create_text(w - 12, 30, text="STAGE", fill="#4A4A5A",
+            cv.create_text(w - 12, 30, text=t("hud.stage_mode"), fill="#4A4A5A",
                            font=("Consolas", 7), anchor="e", tags="hud")
             cv.after(50, self._animate_hud)
             return
@@ -496,7 +496,7 @@ class MainWindow(ctk.CTk):
             net_str = f"↑{net_sent:.0f}KB ↓{net_recv:.0f}KB"
         except Exception:
             tel = "CPU ----  MEM ----"
-            net_str = "NET ----"
+            net_str = t("hud.net")
 
         cv.create_text(w - 16, 14, text=tel, fill="#6A6A7A",
                        font=("Consolas", 8), anchor="e", tags="hud")
@@ -504,33 +504,34 @@ class MainWindow(ctk.CTk):
                        font=("Consolas", 8), anchor="e", tags="hud")
 
         # audio engine status top-left
-        audio_status = "AUDIO: READY"
+        audio_status = t("hud.audio_ready")
         audio_color = "#2ECC71"
         try:
             if hasattr(self, 'playback') and self.playback:
                 if getattr(self.playback, 'playing', False):
-                    audio_status = "AUDIO: PLAYING"
+                    audio_status = t("hud.audio_playing")
                     audio_color = "#3498DB"
                 elif getattr(self.playback, 'index', 0) > 0:
-                    audio_status = "AUDIO: QUEUED"
+                    audio_status = t("hud.audio_queued")
                     audio_color = "#F39C12"
         except Exception:
-            audio_status = "AUDIO: ----"
+            audio_status = t("hud.audio_unknown")
             audio_color = "#6A6A7A"
 
         cv.create_text(16, 14, text=audio_status, fill=audio_color,
                        font=("Consolas", 8, "bold"), anchor="w", tags="hud")
 
         # deck status (if available)
-        deck_str = "DECKS: A:--- B:---"
+        empty = t("hud.deck_empty")
+        deck_str = t("hud.decks", a=empty, b=empty)
         deck_color = "#5A5A6A"
         try:
             if hasattr(self, 'deck_engine') and self.deck_engine:
                 deck_a = self.deck_engine.decks.get("A", {}).get("track") if hasattr(self.deck_engine, 'decks') else None
                 deck_b = self.deck_engine.decks.get("B", {}).get("track") if hasattr(self.deck_engine, 'decks') else None
-                a_name = (deck_a.get('name') or '---')[:12] if deck_a else '---'
-                b_name = (deck_b.get('name') or '---')[:12] if deck_b else '---'
-                deck_str = f"DECKS: A:{a_name} B:{b_name}"
+                a_name = (deck_a.get('name') or empty)[:12] if deck_a else empty
+                b_name = (deck_b.get('name') or empty)[:12] if deck_b else empty
+                deck_str = t("hud.decks", a=a_name, b=b_name)
                 if deck_a or deck_b:
                     deck_color = "#2ECC71"
         except Exception:
@@ -540,14 +541,14 @@ class MainWindow(ctk.CTk):
 
         # current view indicator bottom-left
         view = getattr(self, "current_view", "dashboard").upper()
-        cv.create_text(16, h - 28, text=f"VIEW: {view}", fill="#5A5A6A",
+        cv.create_text(16, h - 28, text=t("hud.view", view=view), fill="#5A5A6A",
                        font=("Consolas", 9), anchor="w", tags="hud")
 
         # library stats bottom-left (above view)
         lib_count = len(getattr(self, 'library', []))
         archived = getattr(self, 'total_archived', 0)
-        cv.create_text(16, h - 42, text=f"LIB: {lib_count}  ARC: {archived}", fill="#4A4A5A",
-                       font=("Consolas", 8), anchor="w", tags="hud")
+        cv.create_text(16, h - 42, text=t("hud.library_stats", lib=lib_count, arc=archived),
+                       fill="#4A4A5A", font=("Consolas", 8), anchor="w", tags="hud")
 
         # frame time bottom-right (ms)
         frame_ms = getattr(self, "_frame_ms", 0)
@@ -569,18 +570,18 @@ class MainWindow(ctk.CTk):
 
         # status text changes based on system state
         if hasattr(self, 'is_playing') and self.is_playing:
-            status_text = "◈ ASTRA LIVE ◈"
+            status_text = t("hud.astra_live")
         elif hasattr(self, 'astra_active') and self.astra_active:
-            status_text = "◈ ASTRA ACTIVE ◈"
+            status_text = t("hud.astra_active")
         else:
-            status_text = "◈ ASTRA ONLINE ◈"
+            status_text = t("hud.astra_online")
 
         cv.create_text(w // 2, h - 16, text=status_text, fill=col,
                        font=("Consolas", 9, "bold"), tags="hud")
 
         # current language bottom-center (above ASTRA status)
         lang = get_language().upper()
-        cv.create_text(w // 2, h - 32, text=f"LANG: {lang}", fill="#4A4A5A",
+        cv.create_text(w // 2, h - 32, text=t("hud.lang", lang=lang), fill="#4A4A5A",
                        font=("Consolas", 8), tags="hud")
 
         # mini waveform preview (bottom-center, above lang) - shows current track waveform
@@ -602,8 +603,8 @@ class MainWindow(ctk.CTk):
             bpm = self.selected_track.get('bpm', 0)
             key = self.selected_track.get('key', '')
             if bpm:
-                cv.create_text(w // 2, h - 72, text=f"BPM: {bpm:.1f}  KEY: {key}", fill="#3498DB",
-                               font=("Consolas", 8, "bold"), tags="hud")
+                cv.create_text(w // 2, h - 72, text=t("hud.bpm_key", bpm=bpm, key=key),
+                               fill="#3498DB", font=("Consolas", 8, "bold"), tags="hud")
 
         # Energy meter (circular, right side)
         try:
@@ -625,7 +626,7 @@ class MainWindow(ctk.CTk):
                           start=90, extent=-angle, outline="#2ECC71", width=3, style="arc", tags="hud")
             cv.create_text(cx_e, cy_e, text=f"{int(energy*100)}%", fill="#2ECC71",
                            font=("Consolas", 8, "bold"), tags="hud")
-            cv.create_text(cx_e, cy_e + 36, text="ENERGY", fill="#4A4A5A",
+            cv.create_text(cx_e, cy_e + 36, text=t("hud.energy"), fill="#4A4A5A",
                            font=("Consolas", 7), tags="hud")
         except Exception:
             pass
@@ -1049,143 +1050,165 @@ class MainWindow(ctk.CTk):
         CommandPalette(self, self.get_command_palette_items())
 
     def get_command_palette_items(self):
+        pc = "palette.commands"
 
         return [
             {
-                "title": "Load Library",
+                "title": t(f"{pc}.load_library"),
                 "subtitle": "Yeni muzik klasoru sec ve analiz baslat.",
                 "shortcut": "Ctrl+L",
                 "keywords": "load library analyze scan folder",
                 "action": self.load_library,
             },
             {
-                "title": "Generate AI Set",
+                "title": t(f"{pc}.generate_set"),
                 "subtitle": "BPM, enerji ve harmoniye gore set olustur.",
                 "shortcut": "Ctrl+G",
                 "keywords": "set builder playlist performans",
                 "action": self.generate_set,
             },
             {
-                "title": "Play / Stop",
+                "title": t(f"{pc}.play_stop"),
                 "subtitle": "Aktif seti cal veya durdur.",
                 "shortcut": "Space",
                 "keywords": "play stop live",
                 "action": self.toggle_playback,
             },
             {
-                "title": "Next Duplicate Review",
+                "title": t(f"{pc}.next_duplicate"),
                 "subtitle": "Muzik Doktoru duplicate karar penceresini ac.",
                 "shortcut": "Ctrl+Shift+D",
                 "keywords": "doctor duplicate eskiyi sil",
                 "action": self.open_next_duplicate_review,
             },
             {
-                "title": "Audit DJ Library Output",
+                "title": t(f"{pc}.audit_output"),
                 "subtitle": "Sifir dosya, eski discovered klasor ve BPM risklerini tara.",
                 "shortcut": "",
                 "keywords": "audit doctor output zero discovered bpm archive",
                 "action": self.run_archive_audit,
             },
             {
-                "title": "Focus Search",
+                "title": t(f"{pc}.focus_search"),
                 "subtitle": "Aktif tablo aramasina odaklan.",
                 "shortcut": "Ctrl+F",
                 "keywords": "search filter bpm genre",
                 "action": self.focus_filter_search,
             },
             {
-                "title": "Show Director",
+                "title": t(f"{pc}.show_director"),
                 "subtitle": "4 saatlik gece akis planini yonet.",
                 "shortcut": "Ctrl+S",
                 "keywords": "director performance timeline",
                 "action": lambda: self.set_view("show_director"),
             },
             {
-                "title": "DJ Heart",
+                "title": t(f"{pc}.dj_heart"),
                 "subtitle": "Setin duygusal nabzini, kalp skorunu ve crowd anini gor.",
                 "shortcut": "",
                 "keywords": "heart emotion crowd pulse duygu kalp",
                 "action": lambda: self.set_view("dj_heart"),
             },
             {
-                "title": "Voice Assistant",
+                "title": t(f"{pc}.voice_assistant"),
                 "subtitle": "Sesli DJ AI mimarisini ve entegrasyon gereksinimlerini gor.",
                 "shortcut": "",
                 "keywords": "voice speech realtime microphone chatgpt ses",
                 "action": lambda: self.set_view("settings"),
             },
             {
-                "title": "Deck Studio",
+                "title": t(f"{pc}.deck_studio"),
                 "subtitle": "Deck A/B, otomatik mix ve crossfade planini ac.",
                 "shortcut": "Ctrl+D",
                 "keywords": "deck automix crossfade",
                 "action": lambda: self.set_view("deck_studio"),
             },
             {
-                "title": "Remix Lab",
+                "title": t(f"{pc}.beat_studio"),
+                "subtitle": "Canli beat uret, kalip sec, BPM anahtarla.",
+                "shortcut": "",
+                "keywords": "beat studio drum pattern bpm producer",
+                "action": lambda: self.set_view("beat_studio"),
+            },
+            {
+                "title": t(f"{pc}.neural_synth"),
+                "subtitle": "Neural synth pad ile deneysel ton uret.",
+                "shortcut": "",
+                "keywords": "neural synth pad timbre generate sound",
+                "action": lambda: self.set_view("neural_synth"),
+            },
+            {
+                "title": t(f"{pc}.remix_lab"),
                 "subtitle": "Vocal ayir, remix blueprint olustur ve stem akisini planla.",
                 "shortcut": "",
                 "keywords": "remix vocal stems demucs acapella beat",
                 "action": lambda: self.set_view("remix_lab"),
             },
             {
-                "title": "Export Center",
+                "title": t(f"{pc}.export_center"),
                 "subtitle": "M3U, manifest ve Rekordbox export ekranini ac.",
                 "shortcut": "Ctrl+E",
                 "keywords": "export rekordbox playlist m3u",
                 "action": lambda: self.set_view("export_center"),
             },
             {
-                "title": "Genre Review",
+                "title": t(f"{pc}.genre_review"),
                 "subtitle": "Unknown/discovered tarzlari akademik aileye bagla.",
                 "shortcut": "Ctrl+R",
                 "keywords": "genre unknown discovered review",
                 "action": lambda: self.set_view("genre_review"),
             },
             {
-                "title": "Global Trends",
+                "title": t(f"{pc}.global_trends"),
                 "subtitle": "Trend ve DJ arsiv onerileri ekranina git.",
                 "shortcut": "",
                 "keywords": "trend beatport spotify cloud archive",
                 "action": lambda: self.set_view("global_trends"),
             },
             {
-                "title": "Refresh View",
+                "title": t(f"{pc}.stage_mode"),
+                "subtitle": "Tam ekran immersive DJ sahnesi.",
+                "shortcut": "F11",
+                "keywords": "stage mode fullscreen immersive performance",
+                "action": self.toggle_stage_mode,
+            },
+            {
+                "title": t(f"{pc}.refresh_view"),
                 "subtitle": "Aktif ekrani yeniden yukle.",
                 "shortcut": "F5",
                 "keywords": "refresh reload",
                 "action": self.refresh_current_view,
             },
             {
-                "title": "DJ Booth",
+                "title": t(f"{pc}.dj_booth"),
                 "subtitle": "Gelecekten gelmis DJ kabini — vinyl, BPM scope, harmonik cark.",
                 "shortcut": "Ctrl+B",
                 "keywords": "booth cockpit vinyl bpm scope harmonic wheel deck",
                 "action": lambda: self.set_view("dj_booth"),
             },
             {
-                "title": "DJ Coach",
+                "title": t(f"{pc}.dj_coach"),
                 "subtitle": "Setini degerlendir, guclu ve zayif noktalari ogren.",
                 "shortcut": "",
                 "keywords": "coach analyze set performance grade",
                 "action": lambda: self.set_view("dj_coach"),
             },
             {
-                "title": "Library Map",
+                "title": t(f"{pc}.library_map"),
                 "subtitle": "Kutuphaneni scatter plot'ta kesfet.",
                 "shortcut": "",
                 "keywords": "map scatter library dna energy brightness",
                 "action": lambda: self.set_view("library_map"),
             },
             {
-                "title": "Smart Set",
+                "title": t(f"{pc}.smart_set"),
                 "subtitle": "Mekan tipine gore enerji egrisi ile otomatik set olustur.",
                 "shortcut": "",
                 "keywords": "smart set wedding club festival template",
                 "action": lambda: self.set_view("smart_set"),
             },
             {
-                "title": "DJ Profile",
+                "title": t(f"{pc}.dj_profile"),
                 "subtitle": "DJ stil DNA'ni olustur, benzer parcalari bul.",
                 "shortcut": "",
                 "keywords": "profile dna style similarity genre energy",
