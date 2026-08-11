@@ -185,6 +185,7 @@
     "library_stats": "BIB: {lib}  ARCH: {arc}",
     "energy": "ENERGIE",
     "stage_mode": "BÜHNE",
+    "stage_timer": "SET {t}",
     "lang": "SPRACHE: {lang}",
     "astra_online": "◈ ASTRA ONLINE ◈",
     "astra_live": "◈ ASTRA LIVE ◈",

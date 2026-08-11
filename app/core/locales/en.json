@@ -185,6 +185,7 @@
     "library_stats": "LIB: {lib}  ARC: {arc}",
     "energy": "ENERGY",
     "stage_mode": "STAGE",
+    "stage_timer": "SET {t}",
     "lang": "LANG: {lang}",
     "astra_online": "◈ ASTRA ONLINE ◈",
     "astra_live": "◈ ASTRA LIVE ◈",

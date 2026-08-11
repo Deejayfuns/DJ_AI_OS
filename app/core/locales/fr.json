@@ -185,6 +185,7 @@
     "library_stats": "BIB: {lib}  ARCH: {arc}",
     "energy": "ÉNERGIE",
     "stage_mode": "SCÈNE",
+    "stage_timer": "SET {t}",
     "lang": "LANGUE: {lang}",
     "astra_online": "◈ ASTRA EN LIGNE ◈",
     "astra_live": "◈ ASTRA EN DIRECT ◈",

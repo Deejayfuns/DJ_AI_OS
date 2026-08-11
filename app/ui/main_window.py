@@ -440,15 +440,48 @@ class MainWindow(ctk.CTk):
         self._hud_frame = f
         cv.delete("hud")
 
-        # In stage mode, collapse the HUD to a minimal pulse dot so the
-        # fullscreen performance view stays clean (F11 toggles).
+        # In stage mode, collapse the HUD to a minimal performance strip:
+        # pulse dot + live set timer + now-playing track. Keeps the
+        # fullscreen view clean while giving the DJ the essentials.
         if getattr(self, "_stage_mode", False):
             pulse_dot = 0.5 + 0.5 * math.sin(f * 0.15)
             dot_col = f"#{int(46 + 209 * pulse_dot):02x}{int(204 + 51 * pulse_dot):02x}{int(113 + 142 * pulse_dot):02x}"
             cv.create_oval(w - 14, 14, w - 4, 24, fill=dot_col,
                            outline="", tags="hud")
-            cv.create_text(w - 12, 30, text=t("hud.stage_mode"), fill="#4A4A5A",
-                           font=("Consolas", 7), anchor="e", tags="hud")
+
+            # live set timer (mm:ss since stage mode engaged)
+            start = getattr(self, "_stage_started", time.time())
+            elapsed = max(0, int(time.time() - start))
+            mm, ss = divmod(elapsed, 60)
+            hh = 0
+            if mm >= 60:
+                hh, mm = divmod(mm, 60)
+            timer = f"{hh}:{mm:02d}:{ss:02d}" if hh else f"{mm:02d}:{ss:02d}"
+            cv.create_text(w - 12, 30, text=t("hud.stage_mode"),
+                           fill="#4A4A5A", font=("Consolas", 7),
+                           anchor="e", tags="hud")
+            cv.create_text(w - 12, 42, text=t("hud.stage_timer").format(t=timer),
+                           fill="#8A8A9A", font=("Consolas", 10, "bold"),
+                           anchor="e", tags="hud")
+
+            # now playing track (pulls live from the playback engine)
+            now_playing = ""
+            try:
+                pb = getattr(self, "playback", None)
+                if pb and getattr(pb, "playing", False):
+                    idx = getattr(pb, "index", 0)
+                    tr = getattr(pb, "tracks", None)
+                    if tr and 0 <= idx < len(tr):
+                        now_playing = tr[idx].get("name") or tr[idx].get("title") or ""
+                        if not now_playing:
+                            now_playing = os.path.basename(tr[idx].get("path", ""))
+            except Exception:
+                now_playing = ""
+            if now_playing:
+                cv.create_text(14, h - 18, anchor="sw", text="♪ " + now_playing,
+                               fill="#9B9BAF", font=("Consolas", 9),
+                               tags="hud")
+
             cv.after(50, self._animate_hud)
             return
 
@@ -1041,6 +1074,8 @@ class MainWindow(ctk.CTk):
         self._stage_mode = not getattr(self, "_stage_mode", False)
 
         if self._stage_mode:
+            # record when the live set started (elapsed-time HUD)
+            self._stage_started = time.time()
             # switch to DJ booth, hide chrome, go fullscreen
             self.set_view("dj_booth")
             try:

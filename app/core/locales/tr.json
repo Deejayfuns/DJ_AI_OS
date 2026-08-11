@@ -185,6 +185,7 @@
     "library_stats": "KTP: {lib}  ARŞİV: {arc}",
     "energy": "ENERJİ",
     "stage_mode": "STAGE",
+    "stage_timer": "SET {t}",
     "lang": "DİL: {lang}",
     "astra_online": "◈ ASTRA ONLINE ◈",
     "astra_live": "◈ ASTRA CANLI ◈",
