@@ -12,6 +12,7 @@ Real instrument plugin beat production with:
 """
 
 import os
+import queue
 import threading
 import tkinter as tk
 from tkinter import filedialog
@@ -59,6 +60,11 @@ class LivePerformancePanel(ctk.CTkFrame):
         # UI state
         self._cell_buttons = {}  # channel -> list of buttons
         self._channels = []
+
+        # Thread-safe UI marshaling (background threads must not call
+        # widget.after() directly on Python 3.12).
+        self._ui_queue = queue.Queue()
+        self.after(80, self._poll_ui)
 
         self._build()
         self._refresh_channels()
@@ -433,12 +439,12 @@ class LivePerformancePanel(ctk.CTkFrame):
                     self._refresh_channels()
                     # auto-play the new style
                     self.play()
-                self.after(0, _apply)
+                self._ui(_apply)
             except Exception as exc:
                 def _err():
                     self.style_status.configure(text="HATA", text_color=RED)
                     self.style_result.configure(text=f"Analiz hatasi: {exc}")
-                self.after(0, _err)
+                self._ui(_err)
 
         threading.Thread(target=_work, daemon=True).start()
 
@@ -542,6 +548,33 @@ class LivePerformancePanel(ctk.CTkFrame):
             self.synth_editor.pack_forget()
         else:
             self.synth_editor.pack(fill="x", padx=12, pady=(0, 8))
+
+    # ============================================================
+    # THREAD-SAFE UI
+    # ============================================================
+    def _ui(self, fn):
+        """Schedule a callback on the UI thread (thread-safe)."""
+        try:
+            self._ui_queue.put(fn)
+        except Exception:
+            pass
+
+    def _poll_ui(self):
+        """Main-thread poller: drain queued UI callbacks."""
+        try:
+            while True:
+                fn = self._ui_queue.get_nowait()
+                try:
+                    fn()
+                except Exception:
+                    pass
+        except queue.Empty:
+            pass
+        try:
+            if self.winfo_exists():
+                self.after(80, self._poll_ui)
+        except Exception:
+            pass
 
     def destroy(self):
         self.stop()

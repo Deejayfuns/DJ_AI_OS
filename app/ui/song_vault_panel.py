@@ -9,6 +9,7 @@ Designed for content you have the right to use.
 """
 
 import os
+import queue
 import threading
 
 import customtkinter as ctk
@@ -40,6 +41,12 @@ class SongVaultPanel(ctk.CTkFrame):
         self._processing = False
         self._cancel = False
         self._row_labels = {}     # query -> status label widget
+
+        # Thread-safe UI marshaling: worker threads put callbacks into a
+        # queue; a main-thread poller drains it. Direct widget.after() from
+        # a background thread raises RuntimeError on Python 3.12.
+        self._ui_queue = queue.Queue()
+        self.after(80, self._poll_ui)
 
         self._build()
 
@@ -228,6 +235,9 @@ class SongVaultPanel(ctk.CTkFrame):
                     mb = size / (1024 * 1024)
                     tag = "MEVCUT (SKIP)" if r.get("skipped") else "HAZIR"
                     self._mark(q, "%s  %.1f MB" % (tag, mb), GREEN, r.get("path"))
+                    # auto-analyze + add to DJ AI OS library (not for skips)
+                    if r.get("path") and not r.get("skipped"):
+                        self._auto_add_to_library(r)
                 else:
                     self._mark(q, "HATA: %s" % r.get("error", ""), RED)
             self._ui(_done)
@@ -241,9 +251,75 @@ class SongVaultPanel(ctk.CTkFrame):
         self.status_dot.configure(text_color=GREEN)
         self.queue_label.configure(text="Kuyruk: 0")
 
-    def _ui(self, fn):
+    # ============================================================
+    # LIBRARY INTEGRATION — analyze + save the downloaded track
+    # ============================================================
+    def _auto_add_to_library(self, result):
+        """Analyze the freshly downloaded file and add it to the DJ AI OS
+        library (BPM, key, energy, role...). Runs analysis on a dedicated
+        thread so the download queue keeps moving."""
+        win = self.win
+        if win is None:
+            return
+        path = result.get("path")
+        if not path or not os.path.exists(path):
+            return
+
+        def analyze():
+            try:
+                track = {
+                    "name": (result.get("title") or os.path.basename(path)),
+                    "path": path,
+                    "id": path,
+                    "file_size": result.get("size", 0),
+                    "source": "song_vault",
+                }
+                # main window enriches (analyzer + music AI) then persists
+                win.enrich_track(track)
+                win.db.save_track(track)
+                self._ui(lambda: self._library_added(track))
+            except Exception as exc:
+                self._ui(lambda: self.set_status(
+                    "KUTUPHANEYE EKLENEMEDI: %s" % exc, AMBER))
+
+        threading.Thread(target=analyze, daemon=True).start()
+
+    def _library_added(self, track):
         try:
-            self.after(0, fn)
+            if hasattr(self.win, "add_track_to_ui"):
+                self.win.add_track_to_ui(track)
+        except Exception:
+            pass
+        bpm = track.get("bpm")
+        key = track.get("camelot") or track.get("key")
+        label = "KUTUPHANEYE EKLENDI"
+        if bpm or key:
+            label += "  |  %s BPM  %s" % (
+                round(bpm, 1) if bpm else "?", key or "?")
+        self.set_status(label, GREEN)
+        self.status_dot.configure(text_color=GREEN)
+
+    def _ui(self, fn):
+        """Schedule a callback on the UI thread (thread-safe)."""
+        try:
+            self._ui_queue.put(fn)
+        except Exception:
+            pass
+
+    def _poll_ui(self):
+        """Main-thread poller: drain queued UI callbacks."""
+        try:
+            while True:
+                fn = self._ui_queue.get_nowait()
+                try:
+                    fn()
+                except Exception:
+                    pass
+        except queue.Empty:
+            pass
+        try:
+            if self.winfo_exists():
+                self.after(80, self._poll_ui)
         except Exception:
             pass
 
