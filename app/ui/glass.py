@@ -1,54 +1,36 @@
-"""Reusable neon-glass UI primitives for DJ AI OS.
+"""
+DJ AI OS — Pro DJ Glass/Visual Primitives
 
-Draws on top of customtkinter / tkinter canvas.  All helpers are pure — they
-do not hold state, so they can be called from any ``after()`` animation loop.
+Clean, professional drawing helpers for tkinter canvas.
+Replaces neon glow with subtle shadows, clean borders, and energy bars.
 
-Usage examples:
+Usage:
+    from app.ui.glass import draw_energy_bar, draw_stat_card, draw_separator
 
-    from app.ui.glass import draw_glow_rect, GlassCard, GlowDot
-
-    # canvas glow
-    draw_glow_rect(canvas, 10, 10, 200, 80, radius=10, color="#00FFA3")
-
-    # glass frame widget
-    card = GlassCard(parent)
-    card.pack(fill="x", padx=12, pady=8)
+    draw_energy_bar(canvas, x, y, w, h, value=0.75)
+    draw_separator(parent, width=100)
 """
 
 import math
 import tkinter as tk
-
 import customtkinter as ctk
 
 from app.ui.theme import (
-    ACCENT,
-    BACKGROUND,
-    GLASS_BG,
-    GLASS_BORDER,
-    GLASS_HIGHLIGHT,
-    GLASS_BG_HOVER,
-    GLOW_ACCENT,
-    GLOW_BLUE,
-    GLOW_MAGENTA,
-    GLOW_PURPLE,
-    MUTED,
-    NEON_BLUE,
-    NEON_PURPLE,
-    NEON_PURPLE_DARK,
-    PANEL,
-    SP1,
-    SP3,
-    R_MED,
-    TEXT,
+    BG, SURFACE, SURFACE_RAISED, BORDER, RED, BLUE_BRIGHT, GREEN, AMBER,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM, RED_DIM,
 )
 
 
+# ============================================================
+# COLOR UTILS
+# ============================================================
+
 def safe_alpha(hex_color, alpha_pct):
-    """Convert hex color + alpha to a valid tkinter hex color (no alpha channel)."""
+    """Blend hex color with background at given alpha (0.0–1.0)."""
     try:
         r1, g1, b1 = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
-        r2, g2, b2 = int(BACKGROUND[1:3], 16), int(BACKGROUND[3:5], 16), int(BACKGROUND[5:7], 16)
-        a = max(0, min(1, alpha_pct))
+        r2, g2, b2 = int(BG[1:3], 16), int(BG[3:5], 16), int(BG[5:7], 16)
+        a = max(0.0, min(1.0, alpha_pct))
         r = int(r1 * a + r2 * (1 - a))
         g = int(g1 * a + g2 * (1 - a))
         b = int(b1 * a + b2 * (1 - a))
@@ -57,208 +39,147 @@ def safe_alpha(hex_color, alpha_pct):
         return hex_color
 
 
-# ============================================================
-# Canvas glow / gradient drawing helpers
-# ============================================================
-
-def draw_glow_rect(
-    canvas,
-    x0, y0, x1, y1,
-    radius=12,
-    color=GLOW_ACCENT,
-    layers=5,
-    width_expand=3,
-):
-    """Draw an outer glow halo around a rounded rectangle.
-
-    Each *layer* expands outward by *width_expand* pixels with decreasing
-    opacity (simulated via increasingly dark version of *color*).
-    """
-    r, g, b = _hex_to_rgb(color)
-    alpha = int(color[7:9], 16) if len(color) == 9 else 48  # default alpha
-
-    for i in range(layers, 0, -1):
-        expand = i * width_expand
-        fade = max(10, alpha - i * 7)
-        fill = f"#{r:02x}{g:02x}{b:02x}{fade:02x}"
-        canvas.create_rectangle(
-            x0 - expand,
-            y0 - expand,
-            x1 + expand,
-            y1 + expand,
-            outline=fill,
-            width=1,
-        )
-
-
-def draw_gradient(canvas, x0, y0, x1, y1, top_color, bottom_color, steps=24):
-    """Fill a rectangular region with a vertical linear gradient."""
-    r1, g1, b1 = _hex_to_rgb(top_color)
-    r2, g2, b2 = _hex_to_rgb(bottom_color)
-    height = max(1, y1 - y0)
-    step = max(1, height // steps)
-
-    for i in range(steps):
-        t = i / max(1, steps - 1)
-        r = int(r1 + (r2 - r1) * t)
-        g = int(g1 + (g2 - g1) * t)
-        b = int(b1 + (b2 - b1) * t)
-        sy = y0 + i * step
-        ey = min(y0 + (i + 1) * step, y1)
-        canvas.create_rectangle(x0, sy, x1, ey, fill=f"#{r:02x}{g:02x}{b:02x}", outline="")
-
-
-def draw_glow_line(canvas, x0, y, x1, color=NEON_PURPLE, width=1, glow_expand=4):
-    """Draw a horizontal line with a soft vertical glow."""
-    r, g, b = _hex_to_rgb(color)
-    for dy in range(-glow_expand, glow_expand + 1):
-        alpha = max(12, 48 - abs(dy) * 8)
-        canvas.create_line(x0, y + dy, x1, y + dy, fill=f"#{r:02x}{g:02x}{b:02x}{alpha:02x}", width=1)
-    canvas.create_line(x0, y, x1, y, fill=color, width=width)
-
-
 def _hex_to_rgb(hex_color):
-    """Parse ``#RRGGBB`` to ``(r, g, b)``."""
     h = hex_color.lstrip("#")[:6]
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 
-# ============================================================
-# Widget: GlassCard
-# ============================================================
-
-class GlassCard(ctk.CTkFrame):
-    """A frame with glass surface, subtle gradient and accent border."""
-
-    def __init__(
-        self,
-        master,
-        fg_color=GLASS_BG,
-        border_color=GLASS_BORDER,
-        corner_radius=R_MED,
-        **kwargs,
-    ):
-        super().__init__(
-            master,
-            fg_color=fg_color,
-            border_width=1,
-            border_color=border_color,
-            corner_radius=corner_radius,
-            **kwargs,
-        )
-
-        # top highlight strip (bright line at very top)
-        self._highlight = ctk.CTkFrame(
-            self,
-            height=2,
-            fg_color=GLASS_HIGHLIGHT,
-            corner_radius=0,
-        )
-        self._highlight.pack(fill="x", side="top")
+def value_to_color(value, low_color=BLUE_BRIGHT, mid_color=GREEN, high_color=RED):
+    """Map a 0.0–1.0 value to a color gradient."""
+    if value < 0.5:
+        t = value * 2
+        r1, g1, b1 = _hex_to_rgb(low_color)
+        r2, g2, b2 = _hex_to_rgb(mid_color)
+    else:
+        t = (value - 0.5) * 2
+        r1, g1, b1 = _hex_to_rgb(mid_color)
+        r2, g2, b2 = _hex_to_rgb(high_color)
+    r = int(r1 + (r2 - r1) * t)
+    g = int(g1 + (g2 - g1) * t)
+    b = int(b1 + (b2 - b1) * t)
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 # ============================================================
-# Widget: GlowDot — pulsing status indicator
+# CANVAS PRIMITIVES
 # ============================================================
 
-class GlowDot(ctk.CTkFrame):
-    """Small circular pulsing status dot using a canvas."""
+def draw_energy_bar(canvas, x, y, width, height, value=0.0, label=""):
+    """Draw a horizontal energy bar (clean, no glow)."""
+    canvas.create_rectangle(x, y, x + width, y + height, fill=BG, outline=BORDER)
 
-    def __init__(self, master, color=ACCENT, size=14, **kwargs):
+    fill_w = max(0, int(width * max(0.0, min(1.0, value))))
+    color = value_to_color(value)
+
+    if fill_w > 0:
+        canvas.create_rectangle(x, y, x + fill_w, y + height, fill=color, outline="")
+
+    if label:
+        canvas.create_text(x + width + 8, y + height // 2, text=label, fill=TEXT_SECONDARY, anchor="w")
+
+
+def draw_progress_bar(parent, value=0.0, height=4, color=RED):
+    """Create a progress bar widget."""
+    bar = ctk.CTkFrame(parent, fg_color=BG, height=height, corner_radius=2)
+    bar.pack_propagate(False)
+
+    fill = ctk.CTkFrame(bar, fg_color=color, height=height, corner_radius=2)
+    fill.place(relx=0, rely=0, relwidth=max(0.0, min(1.0, value)), relheight=1.0)
+
+    return bar
+
+
+def draw_stat_badge(parent, label, value, color=RED, font=("Segoe UI", 11)):
+    """Draw a compact stat badge (label: value)."""
+    frame = ctk.CTkFrame(parent, fg_color=BG, corner_radius=4, border_width=1, border_color=BORDER)
+    frame.pack(side="left", padx=4, pady=2)
+
+    ctk.CTkLabel(frame, text=label, font=font, text_color=TEXT_SECONDARY).pack(side="left", padx=(8, 2), pady=4)
+    ctk.CTkLabel(frame, text=str(value), font=font, text_color=color).pack(side="left", padx=(2, 8), pady=4)
+
+    return frame
+
+
+def draw_separator(parent, width=None, color=BORDER):
+    """Draw a horizontal separator line."""
+    sep = ctk.CTkFrame(parent, height=1, fg_color=color)
+    if width:
+        sep.pack(fill="x", padx=0)
+    else:
+        sep.pack(fill="x", padx=0)
+    return sep
+
+
+def draw_glow_rect(canvas, x0, y0, x1, y1, radius=8, color=RED, layers=2):
+    """Clean rounded rect outline — no glow, just clean border."""
+    canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=1, radius=radius)
+
+
+# ============================================================
+# WIDGET: GlassCard → ProCard
+# ============================================================
+
+class ProCard(ctk.CTkFrame):
+    """Clean card with subtle border — replaces GlassCard."""
+
+    def __init__(self, master, fg_color=SURFACE, border_color=BORDER, corner_radius=8, **kwargs):
+        super().__init__(master, fg_color=fg_color, border_width=1, border_color=border_color,
+                         corner_radius=corner_radius, **kwargs)
+
+        # Top accent line (optional, thin)
+        self._accent_line = ctk.CTkFrame(self, height=2, fg_color=RED, corner_radius=0)
+        self._accent_line.pack(fill="x", side="top")
+
+
+# ============================================================
+# WIDGET: GlowDot → StatusDot
+# ============================================================
+
+class StatusDot(ctk.CTkFrame):
+    """Small status indicator dot (static, no pulse animation)."""
+
+    def __init__(self, master, color=GREEN, size=10, **kwargs):
         super().__init__(master, fg_color="transparent", width=size, height=size, **kwargs)
         self.pack_propagate(False)
 
-        self._color = color
-        self._size = size
-        self._phase = 0
-
-        self._canvas = tk.Canvas(
-            self,
-            width=size,
-            height=size,
-            bg="transparent",
-            highlightthickness=0,
-        )
+        self._canvas = tk.Canvas(self, width=size, height=size, bg=BG, highlightthickness=0)
         self._canvas.pack()
-        self.after(100, self._tick)
 
-    def _tick(self):
-        if not self.winfo_exists():
-            return
-        self._phase = (self._phase + 3) % 360
-        self._draw()
-        self.after(80, self._tick)
+        mid = size / 2
+        self._canvas.create_oval(mid - 3, mid - 3, mid + 3, mid + 3, fill=color, outline="")
 
-    def _draw(self):
-        c = self._canvas
-        c.delete("all")
-        s = self._size
-        mid = s / 2
-        pulse = 1.0 + 0.22 * math.sin(math.radians(self._phase))
-
-        # outer glow
-        r = mid * pulse
-        c.create_oval(mid - r - 2, mid - r - 2, mid + r + 2, mid + r + 2,
-                       outline=safe_alpha(self._color, 0.25), width=1)
-        # solid core
-        c.create_oval(mid - 3, mid - 3, mid + 3, mid + 3,
-                       fill=self._color, outline="")
+    def set_color(self, color):
+        self._canvas.delete("all")
+        mid = self._winfo_reqwidth() / 2
+        self._canvas.create_oval(mid - 3, mid - 3, mid + 3, mid + 3, fill=color, outline="")
 
 
 # ============================================================
-# Widget: NeonMeter — animated glow progress bar
+# WIDGET: NeonMeter → ProMeter
 # ============================================================
 
-class NeonMeter(ctk.CTkFrame):
-    """A thin animated progress bar with glow."""
+class ProMeter(ctk.CTkFrame):
+    """Clean progress meter — replaces NeonMeter."""
 
-    def __init__(self, master, fg_color=ACCENT, height=6, **kwargs):
-        super().__init__(master, fg_color="transparent", height=height, **kwargs)
+    def __init__(self, master, fg_color=RED, height=4, **kwargs):
+        super().__init__(master, fg_color=BG, height=height, **kwargs)
         self.pack_propagate(False)
         self._fg = fg_color
-        self._value = 0.0
-        self._phase = 0
 
-        self._canvas = tk.Canvas(
-            self,
-            height=height,
-            bg=PANEL,
-            highlightthickness=0,
-        )
-        self._canvas.pack(fill="both", expand=True)
-        self.after(90, self._tick)
+        self._bar = ctk.CTkFrame(self, fg_color=fg_color, height=height, corner_radius=2)
+        self._bar.place(relx=0, rely=0, relwidth=0, relheight=1.0)
 
     def set(self, value):
-        self._value = max(0.0, min(1.0, float(value)))
+        self._bar.place_configure(relwidth=max(0.0, min(1.0, float(value))))
 
-    def _tick(self):
-        if not self.winfo_exists():
-            return
-        self._phase = (self._phase + 2) % 360
-        self._draw()
-        self.after(80, self._tick)
+    # Backward compat
+    def _draw(self, **kwargs):
+        pass
 
-    def _draw(self):
-        c = self._canvas
-        c.delete("all")
-        w = max(1, c.winfo_width())
-        h = self._height() or 6
-        bar_w = max(0, int(w * self._value))
 
-        if bar_w > 0:
-            # main bar
-            c.create_rectangle(0, 0, bar_w, h, fill=self._fg, outline="")
-            # glow at tip
-            pulse = 1.5 + 0.5 * math.sin(math.radians(self._phase))
-            c.create_oval(
-                bar_w - 4, -pulse,
-                bar_w + 4, h + pulse,
-                fill=self._fg + "50",
-                outline="",
-            )
-
-    def _height(self):
-        try:
-            return self.winfo_height()
-        except Exception:
-            return 6
+# ============================================================
+# BACKWARD COMPAT ALIASES
+# ============================================================
+GlowDot = StatusDot
+NeonMeter = ProMeter
+GlassCard = ProCard

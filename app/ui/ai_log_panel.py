@@ -1,34 +1,40 @@
-import customtkinter as ctk
-import time
+"""
+DJ AI OS — AI Log Panel
 
-from app.ui.theme import ACCENT, BACKGROUND, GLASS_BG, PANEL, TEXT, F_H3
+Clean monospace terminal-style log panel.
+Dark background, green timestamps, white text.
+"""
+
+import time
+import customtkinter as ctk
+from app.ui.theme import (
+    BG, SURFACE, BORDER, GREEN, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM, F_META,
+)
 
 
 class AILogPanel(ctk.CTkFrame):
 
     def __init__(self, master):
-        super().__init__(master)
+        super().__init__(master, fg_color=BG, corner_radius=6, border_width=1, border_color=BORDER)
 
-        self.configure(fg_color=GLASS_BG)
+        self.max_lines = 200
+        self._lines = []
 
-        self.title = ctk.CTkLabel(
-            self,
-            text="MUZIK DOKTORU MESAJLARI",
-            font=F_H3,
-            text_color=ACCENT
-        )
-        self.title.pack(anchor="w", padx=10, pady=5)
+        # Title
+        ctk.CTkLabel(
+            self, text="LOG", font=("Consolas", 9), text_color=TEXT_DIM,
+        ).pack(anchor="w", padx=8, pady=(6, 2))
 
         self.text = ctk.CTkTextbox(
             self,
-            fg_color=PANEL,
-            text_color=TEXT,
-            wrap="word"
+            fg_color=BG,
+            text_color=TEXT_PRIMARY,
+            font=("Consolas", 10),
+            wrap="word",
         )
-        self.text.pack(fill="both", expand=True, padx=10, pady=10)
+        self.text.pack(fill="both", expand=True, padx=6, pady=(0, 6))
 
-    def log(self, message: str):
-
+    def log(self, message):
         if not self.winfo_exists() or not self.text.winfo_exists():
             return
 
@@ -37,5 +43,8 @@ class AILogPanel(ctk.CTkFrame):
         try:
             self.text.insert("end", f"[{ts}] {message}\n")
             self.text.see("end")
+            self._lines.append(f"[{ts}] {message}")
+            if len(self._lines) > self.max_lines:
+                self._lines = self._lines[-self.max_lines:]
         except Exception:
             pass

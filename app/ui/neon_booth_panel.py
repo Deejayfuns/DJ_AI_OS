@@ -1,244 +1,94 @@
+"""
+DJ AI OS — Now Playing Panel (Pro DJ style)
+
+Clean deck display: BPM, KEY, energy bars.
+Minimal — no neon, no glow, no animated spectrum.
+"""
+
 import math
 import tkinter as tk
-
 import customtkinter as ctk
-
 from app.ui.theme import (
-    ACCENT,
-    BACKGROUND,
-    CARD,
-    GLASS_BG,
-    GLASS_BORDER,
-    MUTED,
-    NEON_BLUE,
-    NEON_MAGENTA,
-    NEON_PURPLE,
-    NEON_PURPLE_DARK,
-    PANEL,
-    TEXT,
+    BG, SURFACE, BORDER, RED, GREEN, AMBER, BLUE_BRIGHT,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM, F_META, F_MONO,
 )
-from app.ui.glass import draw_glow_rect, draw_glow_line
 
 
 class NeonBoothPanel(ctk.CTkFrame):
 
     def __init__(self, master):
+        super().__init__(master, fg_color=SURFACE, corner_radius=8, border_width=1, border_color=BORDER)
 
-        super().__init__(
-            master,
-            fg_color=PANEL,
-            corner_radius=8,
-            border_width=1,
-            border_color=NEON_PURPLE_DARK
-        )
-
-        self.phase = 0
         self.track = {}
 
+        # Header
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=14, pady=(12, 0))
+        header.pack(fill="x", padx=12, pady=(10, 4))
 
-        ctk.CTkLabel(
-            header,
-            text="NEON DJ BOOTH",
-            font=("Segoe UI", 16, "bold"),
-            text_color=NEON_MAGENTA
-        ).pack(side="left")
+        ctk.CTkLabel(header, text="NOW PLAYING", font=("Segoe UI", 12, "bold"),
+                      text_color=TEXT_SECONDARY).pack(side="left")
 
-        self.now_label = ctk.CTkLabel(
-            header,
-            text="NO TRACK LOADED",
-            font=("Segoe UI", 11, "bold"),
-            text_color=MUTED
-        )
+        self.now_label = ctk.CTkLabel(header, text="NO TRACK", font=F_META, text_color=TEXT_DIM)
         self.now_label.pack(side="right")
 
-        self.canvas = tk.Canvas(
-            self,
-            height=170,
-            bg=GLASS_BG,
-            highlightthickness=0
-        )
-        self.canvas.pack(fill="x", padx=10, pady=10)
-
-        self.after(90, self.animate)
+        # Canvas
+        self.canvas = tk.Canvas(self, height=120, bg=BG, highlightthickness=0)
+        self.canvas.pack(fill="x", padx=10, pady=(0, 10))
 
     def update_track(self, track):
-
         self.track = dict(track or {})
-        name = self.track.get("name", "NO TRACK LOADED")
-
+        name = self.track.get("name", "NO TRACK")
         if len(name) > 54:
             name = name[:51] + "..."
-
         self.now_label.configure(text=name)
+        self._draw()
 
-    def animate(self):
-
-        if not self.winfo_exists():
+    def _draw(self, **kwargs):
+        if not hasattr(self, "canvas"):
             return
-
-        self.phase = (self.phase + 1) % 360
-        self.draw()
-        self.after(90, self.animate)
-
-    def draw(self):
-
         self.canvas.delete("all")
-        width = max(self.canvas.winfo_width(), 1)
-        height = 170
+        w = max(self.canvas.winfo_width(), 1)
+        h = 120
 
-        self.draw_grid(width, height)
-        self.draw_deck(width, height, "DECK A", 24, self.track)
-        self.draw_deck(width, height, "DECK B", width - 224, {})
-        self.draw_spectrum(width, height)
-        self.draw_center_meter(width, height)
-
-    def draw_grid(self, width, height):
-
-        for x in range(0, width, 34):
-            self.canvas.create_line(x, 0, x, height, fill="#111536")
-
-        for y in range(0, height, 24):
-            self.canvas.create_line(0, y, width, y, fill="#10132D")
-
-        self.canvas.create_rectangle(
-            1,
-            1,
-            width - 2,
-            height - 2,
-            outline=NEON_PURPLE_DARK,
-            width=2
-        )
-
-    def draw_deck(self, width, height, label, x, track):
-
-        y = 24
-        deck_w = 200
-        deck_h = 118
-        energy = self.number(track.get("energy"), 0.38 if label == "DECK B" else 0.55)
-        bpm = track.get("bpm") or "--"
-        key = track.get("camelot") or track.get("key") or "--"
-
-        self.canvas.create_rectangle(
-            x,
-            y,
-            x + deck_w,
-            y + deck_h,
-            fill=CARD,
-            outline=NEON_PURPLE,
-            width=1
-        )
-        self.canvas.create_text(
-            x + 14,
-            y + 16,
-            text=label,
-            fill=NEON_BLUE,
-            anchor="w",
-            font=("Segoe UI", 10, "bold")
-        )
-        self.canvas.create_text(
-            x + 14,
-            y + 42,
-            text=f"{bpm} BPM",
-            fill=TEXT,
-            anchor="w",
-            font=("Segoe UI", 20, "bold")
-        )
-        self.canvas.create_text(
-            x + 14,
-            y + 70,
-            text=f"KEY {key}",
-            fill=MUTED,
-            anchor="w",
-            font=("Segoe UI", 10, "bold")
-        )
-
-        for index in range(12):
-            bar_h = int((energy * 52) * (0.45 + ((index % 4) / 5)))
-            bx = x + 20 + index * 12
-            by = y + deck_h - 16
-            color = ACCENT if index < 8 else NEON_MAGENTA
-            self.canvas.create_rectangle(
-                bx,
-                by - bar_h,
-                bx + 7,
-                by,
-                fill=color,
-                outline=""
-            )
-
-    def draw_spectrum(self, width, height):
-
-        center_x = width / 2
-        base_y = height - 26
-        bars = 28
-        max_w = max(220, width - 520)
-        start_x = center_x - max_w / 2
-
-        for index in range(bars):
-            phase = math.radians(self.phase * 3 + index * 18)
-            value = 0.45 + (math.sin(phase) + 1) * 0.27
-            bar_h = int(value * 82)
-            x = start_x + index * (max_w / bars)
-            color = ACCENT if index % 3 else NEON_PURPLE
-            self.canvas.create_rectangle(
-                x,
-                base_y - bar_h,
-                x + 6,
-                base_y,
-                fill=color,
-                outline=""
-            )
-
-        self.canvas.create_text(
-            center_x,
-            22,
-            text="LIVE SPECTRUM / MIX MASTER RADAR",
-            fill=NEON_BLUE,
-            font=("Segoe UI", 10, "bold")
-        )
-
-    def draw_center_meter(self, width, height):
-
-        center_x = width / 2
-        center_y = 86
-        radius = 42 + math.sin(math.radians(self.phase * 2)) * 3
-
-        self.canvas.create_oval(
-            center_x - radius,
-            center_y - radius,
-            center_x + radius,
-            center_y + radius,
-            outline=NEON_MAGENTA,
-            width=2
-        )
-        self.canvas.create_oval(
-            center_x - 26,
-            center_y - 26,
-            center_x + 26,
-            center_y + 26,
-            outline=ACCENT,
-            width=2
-        )
-        self.canvas.create_text(
-            center_x,
-            center_y - 5,
-            text="AI",
-            fill=TEXT,
-            font=("Segoe UI", 16, "bold")
-        )
-        self.canvas.create_text(
-            center_x,
-            center_y + 15,
-            text="MASTER",
-            fill=MUTED,
-            font=("Segoe UI", 8, "bold")
-        )
-
-    def number(self, value, default):
-
+        track = self.track
+        bpm = track.get("bpm", "--")
+        key = track.get("camelot") or track.get("key", "--")
+        energy = 0.5
         try:
-            return max(0, min(1, float(value)))
+            energy = max(0, min(1, float(track.get("energy", 0.5))))
         except (TypeError, ValueError):
-            return default
+            pass
+
+        # DECK A (left)
+        self._draw_deck_box(10, 10, 200, 100, "DECK A", bpm, key, energy)
+
+        # DECK B (right — empty)
+        self._draw_deck_box(w - 210, 10, 200, 100, "DECK B", "--", "--", 0.35)
+
+        # Center: crossfader position
+        cx = w / 2
+        self.canvas.create_rectangle(cx - 60, h / 2 - 2, cx + 60, h / 2 + 2, fill=BORDER, outline="")
+        self.canvas.create_rectangle(cx - 3, h / 2 - 8, cx + 3, h / 2 + 8, fill=TEXT_PRIMARY, outline="")
+
+    def _draw_deck_box(self, x, y, w, h, label, bpm, key, energy):
+        self.canvas.create_rectangle(x, y, x + w, y + h, fill=BG, outline=BORDER, width=1)
+
+        # Label
+        self.canvas.create_text(x + 10, y + 12, text=label, fill=BLUE_BRIGHT,
+                                 anchor="w", font=("Consolas", 9, "bold"))
+
+        # BPM (large)
+        self.canvas.create_text(x + 10, y + 40, text=f"{bpm}", fill=TEXT_PRIMARY,
+                                 anchor="w", font=("Consolas", 18, "bold"))
+
+        # KEY
+        self.canvas.create_text(x + 10, y + 64, text=f"KEY {key}", fill=TEXT_DIM,
+                                 anchor="w", font=("Consolas", 9))
+
+        # Energy bars (right side of deck)
+        for i in range(8):
+            bx = x + w - 70 + i * 7
+            bar_h = int(energy * 60 * (0.4 + (i % 4) / 5))
+            by = y + h - 12
+            color = RED if i < 6 else AMBER
+            self.canvas.create_rectangle(bx, by - bar_h, bx + 4, by, fill=color, outline="")

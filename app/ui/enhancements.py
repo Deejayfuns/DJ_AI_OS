@@ -1,9 +1,8 @@
-"""UI Enhancements — next-level UX for DJ AI OS.
+"""UI Enhancements — Pro DJ UX for DJ AI OS.
 
 Features:
-- Toast Notifications: animated popup notifications for actions
+- Toast Notifications: clean slide-in notifications for actions
 - Mini Player: persistent bottom playback controls
-- Theme Switcher: toggle between neon themes
 - Quick Stats Bar: real-time library stats in footer
 """
 
@@ -15,6 +14,9 @@ import tkinter as tk
 import customtkinter as ctk
 
 from app.ui.theme import (
+    BG, SURFACE, SURFACE_RAISED, BORDER, RED, RED_HOVER, GREEN, AMBER, BLUE_BRIGHT,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM,
+    # Backward compat
     ACCENT, ACCENT_SOFT, BACKGROUND, CARD, F_BODY, F_BODY_BOLD, F_META,
     GLASS_BG, GLASS_BORDER, HOVER, MUTED, NEON_BLUE, NEON_MAGENTA,
     NEON_PURPLE, PANEL, SELECTED, SUBTLE, TEXT, WARNING,
@@ -22,110 +24,52 @@ from app.ui.theme import (
 
 
 # ============================================================
-# Theme Presets
-# ============================================================
-
-THEMES = {
-    "NEON GREEN": {
-        "accent": "#00FFA3",
-        "accent_soft": "#00C896",
-        "neon_secondary": "#22D3FF",
-        "bg": "#070812",
-        "panel": "#0D1020",
-        "card": "#15172B",
-    },
-    "NEON PURPLE": {
-        "accent": "#9B5CFF",
-        "accent_soft": "#7B61FF",
-        "neon_secondary": "#FF3DF2",
-        "bg": "#0A0612",
-        "panel": "#100D20",
-        "card": "#1A1530",
-    },
-    "CYBER BLUE": {
-        "accent": "#22D3FF",
-        "accent_soft": "#1AADE0",
-        "neon_secondary": "#00FFA3",
-        "bg": "#050A15",
-        "panel": "#0A1225",
-        "card": "#101A30",
-    },
-    "HOT PINK": {
-        "accent": "#FF3DF2",
-        "accent_soft": "#E035D9",
-        "neon_secondary": "#FFB020",
-        "bg": "#12050F",
-        "panel": "#1A0A18",
-        "card": "#251028",
-    },
-}
-
-
-# ============================================================
 # Toast Notification
 # ============================================================
 
 class ToastNotification(ctk.CTkToplevel):
-    """Animated popup notification that auto-dismisses."""
+    """Clean toast notification that auto-dismisses."""
 
     def __init__(self, message, toast_type="info", duration=3000):
         super().__init__()
         self.overrideredirect(True)
         self.attributes("-topmost", True)
 
-        # Colors
+        # Colors — clean, no neon
         colors = {
-            "info": ("#00FFA3", "#0D1020"),
-            "success": ("#00FFA3", "#0D2015"),
-            "warning": ("#FFB020", "#201A0D"),
-            "error": ("#FF4D6D", "#200D10"),
+            "info":    (GREEN,  BG),
+            "success": (GREEN,  BG),
+            "warning": (AMBER,  BG),
+            "error":   (RED,    BG),
         }
         accent, bg = colors.get(toast_type, colors["info"])
 
         self.configure(fg_color=bg)
+        self.configure(width=360, height=48)
 
-        # Content
-        self.configure(width=400, height=60)
-
-        # Center on screen
+        # Center bottom of screen
         w = self.winfo_screenwidth()
         h = self.winfo_screenheight()
-        self.geometry(f"400x60+{w//2 - 200}+{h - 100}")
+        self.geometry(f"360x48+{w // 2 - 180}+{h - 80}")
+
+        # Left accent bar
+        bar = ctk.CTkFrame(self, width=4, fg_color=accent)
+        bar.pack(side="left", fill="y")
 
         # Message
         ctk.CTkLabel(
             self,
             text=message,
-            font=("Segoe UI", 13, "bold"),
-            text_color=accent,
-            wraplength=380,
-        ).pack(padx=15, pady=10)
+            font=("Segoe UI", 12),
+            text_color=TEXT_PRIMARY,
+            wraplength=330,
+        ).pack(padx=(12, 12), pady=12, side="left")
 
-        # Border glow
-        self.configure(border_width=2, border_color=accent, corner_radius=10)
+        # Border
+        self.configure(border_width=1, border_color=BORDER, corner_radius=6)
 
         # Auto-dismiss
-        self.after(duration, self._fade_out)
-        self._alpha = 1.0
-        self._fade_step()
-
-    def _fade_step(self):
-        if not self.winfo_exists():
-            return
-        try:
-            self._alpha = max(0, self._alpha - 0.02)
-            self.attributes("-alpha", self._alpha)
-        except Exception:
-            pass
-
-        if self._alpha > 0:
-            self.after(16, self._fade_step)
-        else:
-            self.destroy()
-
-    def _fade_out(self):
-        self._alpha = 1.0
-        self._fade_step()
+        self.after(duration, self.destroy)
 
 
 def show_toast(message, toast_type="info", duration=2500):
@@ -147,9 +91,9 @@ class MiniPlayer(ctk.CTkFrame):
                  on_prev=None, **kwargs):
         super().__init__(
             master,
-            fg_color=GLASS_BG,
+            fg_color=SURFACE,
             corner_radius=0,
-            height=50,
+            height=48,
             **kwargs,
         )
         self.pack_propagate(False)
@@ -160,68 +104,69 @@ class MiniPlayer(ctk.CTkFrame):
         self.on_prev = on_prev
         self._playing = False
         self._current_track = ""
-        self._phase = 0
 
-        # Layout
         self._build()
-        self.after(80, self._tick)
 
     def _build(self):
+        # Top separator
+        top_sep = ctk.CTkFrame(self, height=1, fg_color=BORDER)
+        top_sep.pack(fill="x", side="top")
+
         # Left: play controls
         controls = ctk.CTkFrame(self, fg_color="transparent")
-        controls.pack(side="left", padx=10)
+        controls.pack(side="left", padx=12)
 
         self.prev_btn = ctk.CTkButton(
-            controls, text="⏮", width=36, height=36,
-            fg_color=CARD, hover_color=HOVER,
-            font=("Segoe UI", 16),
-            command=self._on_prev,
+            controls, text="⏮", width=32, height=32,
+            fg_color=SURFACE_RAISED, hover_color=BORDER,
+            font=("Segoe UI", 14),
+            command=lambda: self.on_prev() if self.on_prev else None,
         )
         self.prev_btn.pack(side="left", padx=2)
 
         self.play_btn = ctk.CTkButton(
-            controls, text="▶", width=40, height=36,
-            fg_color=ACCENT, hover_color=ACCENT_SOFT,
-            text_color=BACKGROUND,
-            font=("Segoe UI", 16, "bold"),
+            controls, text="▶", width=36, height=32,
+            fg_color=RED, hover_color=RED_HOVER,
+            text_color="#FFFFFF",
+            font=("Segoe UI", 14, "bold"),
             command=self._on_play,
         )
         self.play_btn.pack(side="left", padx=2)
 
         self.next_btn = ctk.CTkButton(
-            controls, text="⏭", width=36, height=36,
-            fg_color=CARD, hover_color=HOVER,
-            font=("Segoe UI", 16),
-            command=self._on_next,
+            controls, text="⏭", width=32, height=32,
+            fg_color=SURFACE_RAISED, hover_color=BORDER,
+            font=("Segoe UI", 14),
+            command=lambda: self.on_next() if self.on_next else None,
         )
         self.next_btn.pack(side="left", padx=2)
 
         self.stop_btn = ctk.CTkButton(
-            controls, text="⏹", width=36, height=36,
-            fg_color=CARD, hover_color=HOVER,
-            font=("Segoe UI", 16),
+            controls, text="⏹", width=32, height=32,
+            fg_color=SURFACE_RAISED, hover_color=BORDER,
+            font=("Segoe UI", 14),
             command=self._on_stop_action,
         )
         self.stop_btn.pack(side="left", padx=(6, 0))
 
+        # Separator
+        sep = ctk.CTkFrame(controls, width=1, height=24, fg_color=BORDER)
+        sep.pack(side="left", padx=10)
+
         # Center: track info
         self.track_label = ctk.CTkLabel(
-            self, text="DJ AI OS — hazir",
-            font=F_BODY, text_color=TEXT,
+            self, text="No track loaded",
+            font=("Segoe UI", 12), text_color=TEXT_PRIMARY,
             anchor="w",
         )
-        self.track_label.pack(side="left", padx=20, fill="x", expand=True)
+        self.track_label.pack(side="left", padx=8, fill="x", expand=True)
 
         # Right: status
         self.status_label = ctk.CTkLabel(
             self, text="STOPPED",
-            font=F_META, text_color=MUTED,
+            font=F_META, text_color=TEXT_DIM,
         )
-        self.status_label.pack(side="right", padx=10)
-
-        # Glow line at top
-        self._glow = ctk.CTkFrame(self, height=2, fg_color=ACCENT)
-        self._glow.pack(fill="x", side="top")
+        self.status_label.pack(side="right", padx=12)
 
     def update_track(self, track):
         name = track.get("name", "")[:50]
@@ -234,21 +179,10 @@ class MiniPlayer(ctk.CTkFrame):
         self._playing = playing
         if playing:
             self.play_btn.configure(text="⏸")
-            self.status_label.configure(text="PLAYING", text_color=ACCENT)
-            self._glow.configure(fg_color=ACCENT)
+            self.status_label.configure(text="PLAYING", text_color=GREEN)
         else:
             self.play_btn.configure(text="▶")
-            self.status_label.configure(text="STOPPED", text_color=MUTED)
-            self._glow.configure(fg_color=SUBTLE)
-
-    def _tick(self):
-        if not self.winfo_exists():
-            return
-        if self._playing:
-            self._phase = (self._phase + 3) % 360
-            pulse = int(1 + abs(math.sin(math.radians(self._phase))) * 2)
-            self._glow.configure(height=pulse)
-        self.after(80, self._tick)
+            self.status_label.configure(text="STOPPED", text_color=TEXT_DIM)
 
     def _on_play(self):
         if self.on_play:
@@ -257,51 +191,6 @@ class MiniPlayer(ctk.CTkFrame):
     def _on_stop_action(self):
         if self.on_stop:
             self.on_stop()
-
-    def _on_next(self):
-        if self.on_next:
-            self.on_next()
-
-    def _on_prev(self):
-        if self.on_prev:
-            self.on_prev()
-
-
-# ============================================================
-# Theme Switcher
-# ============================================================
-
-class ThemeSwitcher(ctk.CTkFrame):
-    """Compact theme selection buttons."""
-
-    def __init__(self, master, on_change=None, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
-
-        self.on_change = on_change
-        self._current = "NEON GREEN"
-
-        ctk.CTkLabel(
-            self, text="THEME:", font=F_META, text_color=MUTED
-        ).pack(side="left", padx=(0, 6))
-
-        for name, colors in THEMES.items():
-            btn = ctk.CTkButton(
-                self,
-                text="",
-                width=24, height=24,
-                fg_color=colors["accent"],
-                hover_color=colors["accent_soft"],
-                corner_radius=12,
-                border_width=2 if name == self._current else 0,
-                border_color="#FFFFFF",
-                command=lambda n=name: self._select(n),
-            )
-            btn.pack(side="left", padx=2)
-
-    def _select(self, name):
-        self._current = name
-        if self.on_change:
-            self.on_change(name, THEMES[name])
 
 
 # ============================================================
@@ -313,61 +202,60 @@ class QuickStatsBar(ctk.CTkFrame):
 
     def __init__(self, master, **kwargs):
         super().__init__(
-            master, fg_color=GLASS_BG, corner_radius=0, height=28, **kwargs
+            master, fg_color=SURFACE, corner_radius=0, height=28, **kwargs
         )
         self.pack_propagate(False)
 
-        self._stats = {}
         self._build()
 
     def _build(self):
         self.version = ctk.CTkLabel(
-            self, text="DJ AI OS v24", font=F_META, text_color=MUTED
+            self, text="DJ AI OS v24", font=F_META, text_color=TEXT_DIM
         )
-        self.version.pack(side="left", padx=10)
+        self.version.pack(side="left", padx=12)
 
-        sep1 = ctk.CTkFrame(self, width=1, height=16, fg_color=SUBTLE)
-        sep1.pack(side="left", padx=6)
+        sep1 = ctk.CTkFrame(self, width=1, height=16, fg_color=BORDER)
+        sep1.pack(side="left", padx=8)
 
         self.tracks_label = ctk.CTkLabel(
-            self, text="0 tracks", font=F_META, text_color=TEXT
+            self, text="0 tracks", font=F_META, text_color=TEXT_SECONDARY
         )
-        self.tracks_label.pack(side="left", padx=6)
+        self.tracks_label.pack(side="left", padx=8)
 
         self.genres_label = ctk.CTkLabel(
-            self, text="0 genres", font=F_META, text_color=TEXT
+            self, text="0 genres", font=F_META, text_color=TEXT_SECONDARY
         )
-        self.genres_label.pack(side="left", padx=6)
+        self.genres_label.pack(side="left", padx=8)
 
         self.duplicates_label = ctk.CTkLabel(
-            self, text="0 dupes", font=F_META, text_color=TEXT
+            self, text="0 dupes", font=F_META, text_color=TEXT_SECONDARY
         )
-        self.duplicates_label.pack(side="left", padx=6)
+        self.duplicates_label.pack(side="left", padx=8)
 
-        sep2 = ctk.CTkFrame(self, width=1, height=16, fg_color=SUBTLE)
-        sep2.pack(side="left", padx=6)
+        sep2 = ctk.CTkFrame(self, width=1, height=16, fg_color=BORDER)
+        sep2.pack(side="left", padx=8)
 
         self.health_label = ctk.CTkLabel(
-            self, text="Health: --", font=F_META, text_color=ACCENT
+            self, text="Health: --", font=F_META, text_color=GREEN
         )
-        self.health_label.pack(side="left", padx=6)
+        self.health_label.pack(side="left", padx=8)
 
         self.dna_label = ctk.CTkLabel(
-            self, text="DNA: ---", font=F_META, text_color=NEON_PURPLE
+            self, text="DNA: ---", font=F_META, text_color=BLUE_BRIGHT
         )
-        self.dna_label.pack(side="right", padx=10)
+        self.dna_label.pack(side="right", padx=12)
 
     def update_stats(self, tracks=0, genres=0, duplicates=0,
                      health=0, dna="---"):
         self.tracks_label.configure(text=f"{tracks} tracks")
         self.genres_label.configure(text=f"{genres} genres")
         self.duplicates_label.configure(
-            text=f"{dupes} dupes",
-            text_color=WARNING if duplicates > 0 else TEXT,
+            text=f"{duplicates} dupes",
+            text_color=AMBER if duplicates > 0 else TEXT_SECONDARY,
         )
         self.health_label.configure(
             text=f"Health: {health}/100",
-            text_color=ACCENT if health >= 80 else WARNING,
+            text_color=GREEN if health >= 80 else AMBER,
         )
         self.dna_label.configure(text=f"DNA: {dna}")
 
@@ -376,12 +264,27 @@ class QuickStatsBar(ctk.CTkFrame):
 # Smooth View Transition
 # ============================================================
 
+# ============================================================
+# Theme Switcher (stub — Pro DJ uses single dark theme)
+# ============================================================
+
+class ThemeSwitcher(ctk.CTkFrame):
+    """Theme switcher placeholder — Pro DJ has one dark theme."""
+
+    def __init__(self, master, on_change=None, **kwargs):
+        super().__init__(master, fg_color="transparent", **kwargs)
+
+        ctk.CTkLabel(
+            self, text="THEME: PRO DJ DARK", font=F_META, text_color=TEXT_DIM
+        ).pack(side="left")
+
+
+# ============================================================
+# Smooth View Transition
+# ============================================================
+
 def smooth_transition(container, new_content_builder, duration_ms=200):
     """Fade out old content, build new content, fade in.
-
-    Usage in set_view:
-        smooth_transition(self.content, lambda: self.build_new_view())
+    (Placeholder — full animation requires complex Tkinter hackery)
     """
-    # For now, just call the builder directly
-    # Full animation would require more complex Tkinter hackery
     new_content_builder()

@@ -9,6 +9,15 @@ class VoiceAssistant:
         self.provider = provider
         self.router = VoiceCommandRouter()
         self.runtime = VoiceRuntime()
+        self._brain = None  # Lazy-loaded AstraBrain
+
+    @property
+    def brain(self):
+        """Lazy-load the AI brain."""
+        if self._brain is None:
+            from app.ai.astra_brain import AstraBrain
+            self._brain = AstraBrain()
+        return self._brain
 
     def capability_summary(self):
 
@@ -68,9 +77,29 @@ class VoiceAssistant:
             "Deck, set, search ve music doctor komutlarini sesle calistir",
         ]
 
-    def interpret_command(self, text):
+    def interpret_command(self, text, context=None):
+        """
+        Interpret a voice/text command.
+        First tries simple router, then falls back to AstraBrain AI.
+        """
+        # First: simple keyword matching (fast)
+        result = self.router.interpret(text)
 
-        return self.router.interpret(text)
+        # If simple router doesn't recognize, use AstraBrain AI
+        if result.get("intent") == "UNKNOWN":
+            brain_result = self.brain.process_command(text, context=context or {})
+
+            # Convert brain result to voice assistant format
+            if brain_result.get("action") != "unknown":
+                return {
+                    "intent": "BRAIN_ACTION",
+                    "heard": text,
+                    "reply": brain_result.get("reply", "Tamam."),
+                    "action": brain_result.get("action"),
+                    "result": brain_result.get("result"),
+                }
+
+        return result
 
     def listen_once(self, timeout=5, phrase_time_limit=7):
 

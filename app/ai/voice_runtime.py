@@ -235,6 +235,13 @@ class VoiceRuntime:
                     timeout=timeout,
                     phrase_time_limit=phrase_time_limit
                 )
+        except SystemExit:
+            # PyAudio GIL crash — disable voice silently
+            return {
+                "ok": False,
+                "text": "",
+                "error": "SES MOTORU KAPATILDI: Mikrofon GIL hatasi",
+            }
         except Exception as e:
             return {
                 "ok": False,

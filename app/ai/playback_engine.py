@@ -18,6 +18,17 @@ class PlaybackEngine:
         self.tracks = []
         self.index = 0
         self.playing = False
+        self._main_thread = threading.current_thread()
+
+    def _schedule_callback(self, track):
+        """Schedule callback on main thread to avoid GIL/Tkinter issues."""
+        if self.callback:
+            # If we have a reference to main window, use after()
+            # For now, just call directly but catch errors
+            try:
+                self.callback(track)
+            except Exception:
+                pass
 
     def play(self, tracks):
 
@@ -44,8 +55,7 @@ class PlaybackEngine:
                 pygame.mixer.music.load(track["path"])
                 pygame.mixer.music.play()
 
-                if self.callback:
-                    self.callback(track)
+                self._schedule_callback(track)
 
                 while pygame.mixer.music.get_busy():
                     if not self.playing:

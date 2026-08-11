@@ -118,7 +118,7 @@ class BeatGridView(ctk.CTkFrame):
                 is_phrase = beat % 16 == 0
 
                 if is_phrase:
-                    color = "#9B5CFF60"
+                    color = "#9B5CFF"
                     width = 2
                 elif is_bar:
                     color = "#253058"
@@ -150,10 +150,10 @@ class BeatGridView(ctk.CTkFrame):
 
         # Phrase regions
         phrase_colors = {
-            "START": "#06352740",
-            "BUILD": "#34270B40",
-            "PEAK": "#35112640",
-            "OUTRO": "#0B244040",
+            "START": "#2ECC71",
+            "BUILD": "#F5A623",
+            "PEAK": "#E63946",
+            "OUTRO": "#457B9D",
         }
 
         ordered = sorted(self._phrase_points,

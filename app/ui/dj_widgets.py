@@ -1,815 +1,486 @@
-"""Futuristic DJ booth canvas widgets for DJ AI OS.
+"""
+DJ AI OS — Pro DJ Widgets
 
-All widgets are canvas-based with after() animation loops.
-They share a consistent visual language: dark backgrounds,
-neon glow accents, smooth phase-based animations.
-
-Usage:
-    from app.ui.dj_widgets import SpinningVinyl, BPMScope, HarmonicWheel
-
-    vinyl = SpinningVinyl(parent, radius=90)
-    vinyl.pack()
-    vinyl.set_track({"name": "Track A", "bpm": 128})
+Professional DJ booth widgets: vinyl, waveform, VU meters, crossfader.
+Rekordbox/Serato inspired — clean, high-contrast, club-proof.
 """
 
 import math
 import tkinter as tk
-
 import customtkinter as ctk
 
 from app.ui.theme import (
-    ACCENT,
-    BACKGROUND,
-    CARD,
-    GLASS_BG,
-    GLASS_BORDER,
-    NEON_BLUE,
-    NEON_MAGENTA,
-    NEON_PURPLE,
-    PANEL,
-    TEXT,
-    MUTED,
-    DANGER,
-    WARNING,
-    SUCCESS,
-    SP1,
-    SP2,
-    R_MED,
+    BG, SURFACE, SURFACE_RAISED, BORDER,
+    RED, RED_HOVER, GREEN, AMBER, BLUE_BRIGHT,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM,
 )
 
-
-# ============================================================
-# Constants
-# ============================================================
-
-BOOTH_BG = "#050A15"
-SCOPE_GREEN = "#00FFA3"
-SCOPE_BLUE = "#22D3FF"
-SCOPE_DIM = "#1A3A5C"
-VINYL_COLOR = "#1A1A2E"
-VINYL_GROOVE = "#252540"
-VINYL_LABEL = "#0D0D1A"
+# Pro DJ constants
+BOOTH_BG = "#08080C"
+VINYL_BG = "#1A1A1E"
+VINYL_GROOVE = "#25252E"
+VINYL_LABEL = RED
+SCOPE_GREEN = GREEN
+SCOPE_RED = RED
+SCOPE_DIM = "#1A1A1E"
 
 
-def safe_alpha(hex_color, alpha_pct):
-    """Convert hex color + alpha to a valid tkinter hex color (no alpha channel).
-
-    tkinter doesn't support RGBA hex. This blends the color with BOOTH_BG
-    based on alpha_pct (0.0=fully transparent, 1.0=fully opaque).
-    """
-    try:
-        r1, g1, b1 = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
-        r2, g2, b2 = int(BOOTH_BG[1:3], 16), int(BOOTH_BG[3:5], 16), int(BOOTH_BG[5:7], 16)
-        a = max(0, min(1, alpha_pct))
-        r = int(r1 * a + r2 * (1 - a))
-        g = int(g1 * a + g2 * (1 - a))
-        b = int(b1 * a + b2 * (1 - a))
-        return f"#{r:02x}{g:02x}{b:02x}"
-    except (ValueError, IndexError):
-        return hex_color
-
-# Camelot wheel colors (12 keys)
-CAMELOT_COLORS = [
-    "#00FFA3", "#22D3FF", "#9B5CFF", "#FF3DF2",
-    "#FFB020", "#FF4D6D", "#00C896", "#2979FF",
-    "#7B61FF", "#FF6B9D", "#00E5A0", "#40E0D0",
-]
-
-CAMELOT_KEYS = [
-    "8B", "3B", "10B", "5B", "12B", "7B",
-    "2B", "9B", "4B", "11B", "6B", "1B",
-]
-
-
-# ============================================================
-# SpinningVinyl — animated rotating turntable
-# ============================================================
-
-class SpinningVinyl(ctk.CTkFrame):
-    """Animated spinning vinyl record with groove rings and label."""
+class SpinningVinyl(tk.Canvas):
+    """Animated vinyl record that spins when playing."""
 
     def __init__(self, master, radius=90, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
-
+        self._size = radius * 2 + 20
+        super().__init__(master, width=self._size, height=self._size,
+                         bg=BOOTH_BG, highlightthickness=0, **kwargs)
         self._radius = radius
-        self._diameter = radius * 2 + 20
-        self._phase = 0
-        self._speed = 2
-        self._track = {}
-
-        self._canvas = tk.Canvas(
-            self,
-            width=self._diameter,
-            height=self._diameter,
-            bg=BOOTH_BG,
-            highlightthickness=0,
-        )
-        self._canvas.pack()
-
-        self.after(60, self._tick)
+        self._angle = 0
+        self._spinning = False
+        self._track_name = ""
+        self._after_id = None
+        self._draw()
 
     def set_track(self, track):
-        self._track = dict(track or {})
-        self._speed = max(1, min(5, int(self._track.get("bpm", 120) / 30)))
+        self._track_name = track.get("name", "")[:20]
 
-    def _tick(self):
-        if not self.winfo_exists():
+    def start_spin(self):
+        self._spinning = True
+        self._animate()
+
+    def stop_spin(self):
+        self._spinning = False
+
+    def _animate(self):
+        if not self._spinning:
             return
-        self._phase = (self._phase + self._speed) % 360
-        self._render()
-        self.after(50, self._tick)
+        self._angle = (self._angle + 2) % 360
+        self._draw()
+        self._after_id = self.after(40, self._animate)
 
-    def _render(self):
-        c = self._canvas
-        c.delete("all")
-        cx = self._diameter / 2
-        cy = self._diameter / 2
+    def _draw(self):
+        self.delete("all")
+        cx = self._size / 2
+        cy = self._size / 2
         r = self._radius
 
-        # Outer glow
-        for i in range(3, 0, -1):
-            c.create_oval(
-                cx - r - i * 3, cy - r - i * 3,
-                cx + r + i * 3, cy + r + i * 3,
-                outline=safe_alpha(ACCENT, 0.08),
-                width=1,
-            )
+        # Outer ring
+        self.create_oval(cx-r, cy-r, cx+r, cy+r, fill=VINYL_BG, outline="#333", width=2)
 
-        # Vinyl body
-        c.create_oval(
-            cx - r, cy - r, cx + r, cy + r,
-            fill=VINYL_COLOR,
-            outline="#2A2A4A",
-            width=2,
-        )
-
-        # Groove rings
-        for groove_r in range(int(r * 0.35), int(r * 0.95), 6):
-            c.create_oval(
-                cx - groove_r, cy - groove_r,
-                cx + groove_r, cy + groove_r,
-                outline=VINYL_GROOVE,
-                width=1,
-            )
-
-        # Rotating highlight (simulates light reflection)
-        angle = math.radians(self._phase)
-        highlight_x = cx + math.cos(angle) * r * 0.6
-        highlight_y = cy + math.sin(angle) * r * 0.6
-        glow_r = 12 + 4 * math.sin(math.radians(self._phase * 2))
-        c.create_oval(
-            highlight_x - glow_r, highlight_y - glow_r,
-            highlight_x + glow_r, highlight_y + glow_r,
-            fill=safe_alpha(ACCENT, 0.12),
-            outline="",
-        )
+        # Grooves
+        for groove_r in range(int(r*0.35), int(r*0.9), 4):
+            self.create_oval(cx-groove_r, cy-groove_r, cx+groove_r, cy+groove_r,
+                              outline=VINYL_GROOVE, width=1)
 
         # Center label
-        label_r = r * 0.3
-        c.create_oval(
-            cx - label_r, cy - label_r,
-            cx + label_r, cy + label_r,
-            fill=VINYL_LABEL,
-            outline=NEON_PURPLE,
-            width=2,
-        )
+        label_r = int(r * 0.3)
+        self.create_oval(cx-label_r, cy-label_r, cx+label_r, cy+label_r,
+                          fill=VINYL_LABEL, outline="")
 
-        # Center dot
-        c.create_oval(cx - 3, cy - 3, cx + 3, cy + 3, fill=ACCENT, outline="")
+        # Spindle
+        self.create_oval(cx-4, cy-4, cx+4, cy+4, fill=TEXT_PRIMARY, outline="")
 
-        # BPM text
-        bpm = self._track.get("bpm", "--")
-        c.create_text(
-            cx, cy - 8,
-            text=f"{bpm}",
-            fill=TEXT,
-            font=("Segoe UI", 14, "bold"),
-        )
-        c.create_text(
-            cx, cy + 10,
-            text="BPM",
-            fill=MUTED,
-            font=("Segoe UI", 7),
-        )
+        # Rotating dot to show spin
+        if self._spinning:
+            rad = math.radians(self._angle)
+            dot_x = cx + math.cos(rad) * (label_r - 5)
+            dot_y = cy + math.sin(rad) * (label_r - 5)
+            self.create_oval(dot_x-3, dot_y-3, dot_x+3, dot_y+3, fill="white", outline="")
+
+        # Track name
+        if self._track_name:
+            self.create_text(cx, cy + r + 12, text=self._track_name,
+                              fill=TEXT_SECONDARY, font=("Segoe UI", 9))
 
 
-# ============================================================
-# BPMScope — oscilloscope-style beat visualization
-# ============================================================
+class WaveformDisplay(tk.Canvas):
+    """Serato-style colored waveform display."""
 
-class BPMScope(ctk.CTkFrame):
-    """Oscilloscope-style beat visualization with grid lines."""
+    def __init__(self, master, width=800, height=120, **kwargs):
+        super().__init__(master, width=width, height=height,
+                         bg=BG, highlightthickness=0, **kwargs)
+        self._waveform = []
+        self._playhead = 0.0  # 0.0 - 1.0
+        self._bpm = 0
+        self._key = ""
+        self._playing = False
 
-    def __init__(self, master, width=400, height=120, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
+    def set_waveform(self, waveform):
+        self._waveform = waveform or []
+        self._draw()
 
-        self._width = width
-        self._height = height
-        self._phase = 0
-        self._bpm = 120
-        self._energy = 0.5
-        self._beat_phase = 0
+    def set_playhead(self, position):
+        self._playhead = max(0.0, min(1.0, position))
+        self._draw()
 
-        self._canvas = tk.Canvas(
-            self,
-            width=width,
-            height=height,
-            bg=BOOTH_BG,
-            highlightthickness=0,
-        )
-        self._canvas.pack()
+    def set_info(self, bpm=0, key=""):
+        self._bpm = bpm
+        self._key = key
 
-        self.after(40, self._tick)
-
-    def update_data(self, bpm=120, energy=0.5):
-        self._bpm = max(60, min(200, bpm))
-        self._energy = max(0, min(1, energy))
-
-    def _tick(self):
-        if not self.winfo_exists():
-            return
-        self._phase = (self._phase + 2) % 360
-        self._beat_phase = (self._beat_phase + self._bpm / 60 * 4) % 360
-        self._render()
-        self.after(33, self._tick)  # ~30fps
-
-    def _render(self):
-        c = self._canvas
-        c.delete("all")
-        w = self._width
-        h = self._height
-        center_y = h / 2
-
-        # Grid lines (beat markers)
-        beat_width = max(1, int(w / max(1, (60 / self._bpm) * 4 / 0.033)))
-        for x in range(0, w, max(1, beat_width)):
-            is_bar = (x // max(1, beat_width)) % 4 == 0
-            color = SCOPE_DIM if is_bar else "#0D1520"
-            c.create_line(x, 0, x, h, fill=color, width=1 if is_bar else 1)
+    def _draw(self):
+        self.delete("all")
+        w = max(self.winfo_width(), 800)
+        h = max(self.winfo_height(), 120)
+        cy = h // 2
 
         # Center line
-        c.create_line(0, center_y, w, center_y, fill=SCOPE_DIM, width=1)
+        self.create_line(0, cy, w, cy, fill=BORDER, width=1)
 
-        # Beat waveform
-        points = []
-        for x in range(w):
-            t = x / max(1, w)
-            # Composite waveform: bass + mid + treble
-            bass = math.sin(2 * math.pi * t * 4 + math.radians(self._beat_phase)) * 0.4
-            mid = math.sin(2 * math.pi * t * 8 + math.radians(self._phase * 1.5)) * 0.25
-            treble = math.sin(2 * math.pi * t * 16 + math.radians(self._phase * 3)) * 0.15
-
-            # Beat accent
-            beat_pos = (self._beat_phase / 360) % 1
-            beat_dist = abs(t - beat_pos)
-            beat_pulse = max(0, 1 - beat_dist * 8) * 0.3
-
-            value = (bass + mid + treble + beat_pulse) * self._energy
-            y = center_y - value * (h / 2 - 10)
-            points.append((x, y))
-
-        # Draw waveform
-        for i in range(len(points) - 1):
-            x1, y1 = points[i]
-            x2, y2 = points[i + 1]
-            intensity = abs(y1 - center_y) / (h / 2)
-            if intensity > 0.6:
-                color = "#EAF2FF"
-            elif intensity > 0.3:
-                color = SCOPE_GREEN
-            else:
-                color = SCOPE_BLUE
-            c.create_line(x1, y1, x2, y2, fill=color, width=2)
-
-        # Beat position marker
-        beat_x = int((self._beat_phase / 360 % 1) * w)
-        c.create_line(beat_x, 0, beat_x, h, fill=ACCENT, width=2, dash=(3, 3))
-
-
-# ============================================================
-# EnergyOrb — pulsating energy sphere
-# ============================================================
-
-class EnergyOrb(ctk.CTkFrame):
-    """Pulsating energy sphere with outer reaction rings."""
-
-    def __init__(self, master, radius=40, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
-
-        self._radius = radius
-        self._diameter = radius * 2 + 40
-        self._phase = 0
-        self._energy = 0.5
-
-        self._canvas = tk.Canvas(
-            self,
-            width=self._diameter,
-            height=self._diameter,
-            bg=BOOTH_BG,
-            highlightthickness=0,
-        )
-        self._canvas.pack()
-
-        self.after(60, self._tick)
-
-    def set_energy(self, energy):
-        self._energy = max(0, min(1, float(energy)))
-
-    def _tick(self):
-        if not self.winfo_exists():
+        if not self._waveform:
+            self.create_text(w//2, cy, text="Drop track to see waveform",
+                              fill=TEXT_DIM, font=("Segoe UI", 10))
+            # BPM/KEY overlay
+            if self._bpm:
+                self.create_text(12, 12, text=f"{self._bpm:.0f} BPM", fill=RED,
+                                  font=("Consolas", 11, "bold"), anchor="w")
+            if self._key:
+                self.create_text(12, 28, text=f"KEY {self._key}", fill=BLUE_BRIGHT,
+                                  font=("Consolas", 10), anchor="w")
             return
-        self._phase = (self._phase + 2) % 360
-        self._render()
-        self.after(60, self._tick)
 
-    def _render(self):
-        c = self._canvas
-        c.delete("all")
-        cx = self._diameter / 2
-        cy = self._diameter / 2
-        r = self._radius
+        # Draw waveform bars
+        n = len(self._waveform)
+        step = max(1, w / n)
 
-        # Outer reaction rings
-        for ring in range(3):
-            pulse = math.sin(math.radians(self._phase * 2 + ring * 40)) * 0.3
-            ring_r = r + 8 + ring * 8 + pulse * r * 0.2
-            alpha_val = max(10, 40 - ring * 12)
-            # Color based on energy
-            if self._energy > 0.7:
-                ring_color = safe_alpha("#FF3DF2", alpha_val / 100)
-            elif self._energy > 0.4:
-                ring_color = safe_alpha("#9B5CFF", alpha_val / 100)
+        for i, val in enumerate(self._waveform):
+            x = i * step
+            v = abs(val) if isinstance(val, (int, float)) else 0.5
+            bar_h = int(v * cy * 0.9)
+            bar_h = max(1, min(cy - 2, bar_h))
+
+            if v < 0.35:
+                color = GREEN
+            elif v < 0.65:
+                color = AMBER
             else:
-                ring_color = safe_alpha("#22D3FF", alpha_val / 100)
+                color = RED
 
-            c.create_oval(
-                cx - ring_r, cy - ring_r,
-                cx + ring_r, cy + ring_r,
-                outline=ring_color,
-                width=1,
-            )
+            self.create_line(x, cy - bar_h, x, cy + bar_h, fill=color, width=max(1, step))
 
-        # Main orb
-        # Gradient effect via concentric circles
-        for i in range(5):
-            shrink = i * (r / 6)
-            orb_r = r - shrink
-            t = i / 5
+        # Playhead
+        ph_x = self._playhead * w
+        self.create_line(ph_x, 0, ph_x, h, fill=TEXT_PRIMARY, width=2)
 
-            if self._energy > 0.7:
-                red = int(0 + 255 * t)
-                green = int(255 * (1 - t * 0.5))
-                blue = int(242 * (1 - t))
-            elif self._energy > 0.4:
-                red = int(155 * t)
-                green = int(92 + 163 * (1 - t))
-                blue = int(255 * (1 - t * 0.3))
+        # BPM/KEY overlay
+        if self._bpm:
+            self.create_text(w - 12, 12, text=f"{self._bpm:.0f} BPM", fill=RED,
+                              font=("Consolas", 11, "bold"), anchor="e")
+        if self._key:
+            self.create_text(w - 12, 28, text=f"KEY {self._key}", fill=BLUE_BRIGHT,
+                              font=("Consolas", 10), anchor="e")
+
+
+class VUMeter(tk.Canvas):
+    """Vertical VU meter with level bars."""
+
+    def __init__(self, master, height=150, width=20, **kwargs):
+        super().__init__(master, width=width, height=height,
+                         bg=BG, highlightthickness=0, **kwargs)
+        self._level = 0.0
+        self._peak = 0.0
+
+    def set_level(self, level):
+        self._level = max(0.0, min(1.0, level))
+        self._peak = max(self._peak - 0.02, self._level)
+        self._draw()
+
+    def _draw(self):
+        self.delete("all")
+        w = self.winfo_width()
+        h = self.winfo_height()
+
+        # Background
+        self.create_rectangle(0, 0, w, h, fill=BG, outline=BORDER)
+
+        # Level bars
+        num_bars = int(h / 6)
+        filled = int(num_bars * self._level)
+
+        for i in range(num_bars):
+            y = h - (i + 1) * 6
+            ratio = i / num_bars
+
+            if ratio < 0.6:
+                color = GREEN
+            elif ratio < 0.8:
+                color = AMBER
             else:
-                red = int(34 * t)
-                green = int(211 * (1 - t * 0.5))
-                blue = int(255)
+                color = RED
 
-            color = f"#{red:02x}{green:02x}{blue:02x}"
-            c.create_oval(
-                cx - orb_r, cy - orb_r,
-                cx + orb_r, cy + orb_r,
-                fill=color if i == 4 else "",
-                outline=color if i < 4 else "",
-                width=1,
-            )
+            if i < filled:
+                self.create_rectangle(2, y, w - 2, y + 4, fill=color, outline="")
+            else:
+                self.create_rectangle(2, y, w - 2, y + 4, fill=SCOPE_DIM, outline="")
 
-        # Center bright point
-        c.create_oval(cx - 4, cy - 4, cx + 4, cy + 4, fill="#FFFFFF", outline="")
+        # Peak indicator
+        peak_y = h - int(num_bars * self._peak) * 6
+        self.create_rectangle(2, peak_y, w - 2, peak_y + 2, fill=TEXT_PRIMARY, outline="")
 
-        # Energy percentage
-        c.create_text(
-            cx, cy + r + 18,
-            text=f"{int(self._energy * 100)}%",
-            fill=ACCENT,
-            font=("Segoe UI", 10, "bold"),
-        )
+
+class Crossfader(tk.Canvas):
+    """Horizontal crossfader with visual position."""
+
+    def __init__(self, master, width=500, height=30, **kwargs):
+        super().__init__(master, width=width, height=height,
+                         bg=BG, highlightthickness=0, **kwargs)
+        self._position = 0.5  # 0.0 = A, 1.0 = B
+        self._draw()
+
+    def set_position(self, pos):
+        self._position = max(0.0, min(1.0, pos))
+        self._draw()
+
+    def _draw(self):
+        self.delete("all")
+        w = self.winfo_width()
+        h = self.winfo_height()
+        cy = h // 2
+
+        # Track
+        self.create_rectangle(20, cy - 3, w - 20, cy + 3, fill=SCOPE_DIM, outline=BORDER)
+
+        # Fill from center
+        center = w // 2
+        fader_x = 20 + (w - 40) * self._position
+        if self._position < 0.5:
+            self.create_rectangle(fader_x, cy - 2, center, cy + 2, fill=BLUE_BRIGHT, outline="")
+        else:
+            self.create_rectangle(center, cy - 2, fader_x, cy + 2, fill=RED, outline="")
+
+        # Handle
+        self.create_rectangle(fader_x - 8, cy - 10, fader_x + 8, cy + 10,
+                              fill=TEXT_PRIMARY, outline=BORDER, width=1)
+
+        # Labels
+        self.create_text(12, cy, text="A", fill=BLUE_BRIGHT, font=("Consolas", 10, "bold"))
+        self.create_text(w - 12, cy, text="B", fill=RED, font=("Consolas", 10, "bold"))
+
+
+class HotCuePads(tk.Canvas):
+    """8 hot cue pads that light up on trigger."""
+
+    def __init__(self, master, deck="A", width=400, height=60, **kwargs):
+        super().__init__(master, width=width, height=height,
+                         bg=BG, highlightthickness=0, **kwargs)
+        self._deck = deck
+        self._pads = [None] * 8
+        self._colors = ["#00FFA3", "#FF3DF2", "#FFB020", "#22D3FF",
+                        "#9B5CFF", "#FF4D6D", "#457B9D", "#FFFFFF"]
+        self._active = [False] * 8
+        self._draw()
+
+    def set_pad(self, index, active=True, color=None):
+        if 0 <= index < 8:
+            self._active[index] = active
+            if color:
+                self._colors[index] = color
+            self._draw()
+
+    def _draw(self):
+        self.delete("all")
+        w = self.winfo_width()
+        pad_w = (w - 20) // 8
+        cy = self.winfo_height() // 2
+
+        for i in range(8):
+            x = 10 + i * (pad_w + 2)
+            color = self._colors[i] if self._active[i] else SCOPE_DIM
+
+            self.create_rectangle(x, 5, x + pad_w, cy * 2 - 5,
+                                  fill=color, outline=BORDER, width=1)
+
+            self.create_text(x + pad_w // 2, cy,
+                              text=f"C{i+1}", fill=TEXT_PRIMARY if self._active[i] else TEXT_DIM,
+                              font=("Consolas", 9, "bold"))
+
+
+class BPMCounter(tk.Canvas):
+    """Large BPM display with animated tempo indicator."""
+
+    def __init__(self, master, width=160, height=80, **kwargs):
+        super().__init__(master, width=width, height=height,
+                         bg=BG, highlightthickness=0, **kwargs)
+        self._bpm = 0
+        self._confidence = 0
+        self._draw()
+
+    def set_bpm(self, bpm, confidence=0):
+        self._bpm = bpm
+        self._confidence = confidence
+        self._draw()
+
+    def _draw(self):
+        self.delete("all")
+        w = self.winfo_width()
+        h = self.winfo_height()
+        cx = w // 2
+        cy = h // 2
+
+        # Background
+        self.create_rectangle(0, 0, w, h, fill=BG, outline=BORDER, width=1)
+
+        # BPM number (large)
+        self.create_text(cx, cy - 5, text=f"{self._bpm:.0f}", fill=TEXT_PRIMARY,
+                          font=("Consolas", 28, "bold"))
+
+        # Label
+        self.create_text(cx, cy + 22, text="BPM", fill=TEXT_DIM,
+                          font=("Consolas", 9))
+
+        # Confidence bar
+        bar_w = int((w - 20) * self._confidence)
+        self.create_rectangle(10, h - 8, 10 + bar_w, h - 4, fill=GREEN, outline="")
+        self.create_rectangle(10 + bar_w, h - 8, w - 10, h - 4, fill=SCOPE_DIM, outline="")
+
+
+class KeyDisplay(tk.Canvas):
+    """Camelot key display with compatibility indicator."""
+
+    def __init__(self, master, width=100, height=80, **kwargs):
+        super().__init__(master, width=width, height=height,
+                         bg=BG, highlightthickness=0, **kwargs)
+        self._key = ""
+        self._compatible = False
+        self._draw()
+
+    def set_key(self, key, compatible=False):
+        self._key = key
+        self._compatible = compatible
+        self._draw()
+
+    def _draw(self):
+        self.delete("all")
+        w = self.winfo_width()
+        h = self.winfo_height()
+        cx = w // 2
+        cy = h // 2
+
+        color = BLUE_BRIGHT if self._compatible else TEXT_PRIMARY
+
+        self.create_rectangle(0, 0, w, h, fill=BG, outline=BORDER, width=1)
+        self.create_text(cx, cy - 5, text=self._key, fill=color,
+                          font=("Consolas", 20, "bold"))
+        self.create_text(cx, cy + 20, text="KEY", fill=TEXT_DIM,
+                          font=("Consolas", 9))
+
+        # Compatibility indicator
+        if self._compatible:
+            self.create_oval(w - 16, 4, w - 4, 16, fill=GREEN, outline="")
+
+
+class EnergyCurve(tk.Canvas):
+    """Set energy flow visualization."""
+
+    def __init__(self, master, width=600, height=60, **kwargs):
+        super().__init__(master, width=width, height=height,
+                         bg=BG, highlightthickness=0, **kwargs)
+        self._energies = []
+        self._current_idx = 0
+
+    def set_energies(self, energies, current_idx=0):
+        self._energies = energies
+        self._current_idx = current_idx
+        self._draw()
+
+    def _draw(self):
+        self.delete("all")
+        w = self.winfo_width()
+        h = self.winfo_height()
+
+        if not self._energies:
+            self.create_text(w//2, h//2, text="Set energy curve", fill=TEXT_DIM,
+                              font=("Segoe UI", 9))
+            return
+
+        n = len(self._energies)
+        step = max(1, (w - 20) / n)
+
+        for i, energy in enumerate(self._energies):
+            x = 10 + i * step
+            bar_h = int(energy * (h - 10))
+            y = h - 5 - bar_h
+
+            is_current = (i == self._current_idx)
+            color = RED if is_current else (AMBER if energy > 0.7 else GREEN if energy > 0.4 else BLUE_BRIGHT)
+
+            self.create_rectangle(x, y, x + step - 1, h - 5, fill=color, outline="")
+
+        # Current position marker
+        if self._current_idx < n:
+            cx = 10 + self._current_idx * step + step // 2
+            self.create_line(cx, 0, cx, h, fill=TEXT_PRIMARY, width=2)
 
 
 # ============================================================
-# HarmonicWheel — interactive Camelot wheel
+# BACKWARD COMPATIBILITY ALIASES
 # ============================================================
 
-class HarmonicWheel(ctk.CTkFrame):
-    """Interactive Camelot harmonic compatibility wheel."""
+# Old names that other modules still import
+class HarmonicWheel(tk.Canvas):
+    """Compatibility wrapper for old HarmonicWheel interface."""
 
     COMPATIBLE_KEYS = {
-        "8B": ["8B", "9B", "7B", "8A"],
-        "9B": ["9B", "10B", "8B", "9A"],
-        "10B": ["10B", "11B", "9B", "10A"],
-        "11B": ["11B", "12B", "10B", "11A"],
-        "12B": ["12B", "1B", "11B", "12A"],
-        "1B": ["1B", "2B", "12B", "1A"],
-        "2B": ["2B", "3B", "1B", "2A"],
-        "3B": ["3B", "4B", "2B", "3A"],
-        "4B": ["4B", "5B", "3B", "4A"],
-        "5B": ["5B", "6B", "4B", "5A"],
-        "6B": ["6B", "7B", "5B", "6A"],
-        "7B": ["7B", "8B", "6B", "7A"],
-        "8A": ["8A", "9A", "7A", "8B"],
-        "9A": ["9A", "10A", "8A", "9B"],
-        "10A": ["10A", "11A", "9A", "10B"],
-        "11A": ["11A", "12A", "10A", "11B"],
-        "12A": ["12A", "1A", "11A", "12B"],
-        "1A": ["1A", "2A", "12A", "1B"],
-        "2A": ["2A", "3A", "1A", "2B"],
-        "3A": ["3A", "4A", "2A", "3B"],
-        "4A": ["4A", "5A", "3A", "4B"],
-        "5A": ["5A", "6A", "4A", "5B"],
-        "6A": ["6A", "7A", "5A", "6B"],
-        "7A": ["7A", "8A", "6A", "7B"],
+        "1A": ["1A", "2A", "12A", "1B"], "2A": ["2A", "1A", "3A", "2B"],
+        "3A": ["3A", "2A", "4A", "3B"], "4A": ["4A", "3A", "5A", "4B"],
+        "5A": ["5A", "4A", "6A", "5B"], "6A": ["6A", "5A", "7A", "6B"],
+        "7A": ["7A", "6A", "8A", "7B"], "8A": ["8A", "7A", "9A", "8B"],
+        "9A": ["9A", "8A", "10A", "9B"], "10A": ["10A", "9A", "11A", "10B"],
+        "11A": ["11A", "10A", "12A", "11B"], "12A": ["12A", "11A", "1A", "12B"],
+        "1B": ["1B", "2B", "12B", "1A"], "2B": ["2B", "1B", "3B", "2A"],
+        "3B": ["3B", "2B", "4B", "3A"], "4B": ["4B", "3B", "5B", "4A"],
+        "5B": ["5B", "4B", "6B", "5A"], "6B": ["6B", "5B", "7B", "6A"],
+        "7B": ["7B", "6B", "8B", "7A"], "8B": ["8B", "7B", "9B", "8A"],
+        "9B": ["9B", "8B", "10B", "9A"], "10B": ["10B", "9B", "11B", "10A"],
+        "11B": ["11B", "10B", "12B", "11A"], "12B": ["12B", "11B", "1B", "12A"],
     }
 
-    def __init__(self, master, radius=110, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
-
+    def __init__(self, master, radius=95, **kwargs):
+        size = radius * 2 + 20
+        super().__init__(master, width=size, height=size, bg=BG, highlightthickness=0, **kwargs)
         self._radius = radius
-        self._diameter = radius * 2 + 40
-        self._phase = 0
-        self._selected_key = "8A"
         self._deck_a_key = ""
         self._deck_b_key = ""
-
-        self._canvas = tk.Canvas(
-            self,
-            width=self._diameter,
-            height=self._diameter,
-            bg=BOOTH_BG,
-            highlightthickness=0,
-        )
-        self._canvas.pack()
-        self._canvas.bind("<Button-1>", self._on_click)
-
-        self.after(100, self._tick)
+        self._draw()
 
     def set_keys(self, deck_a="", deck_b=""):
         self._deck_a_key = deck_a
         self._deck_b_key = deck_b
-        if deck_a:
-            self._selected_key = deck_a
+        self._draw()
 
-    def _on_click(self, event):
-        cx = self._diameter / 2
-        cy = self._diameter / 2
-        dx = event.x - cx
-        dy = event.y - cy
-        dist = math.sqrt(dx * dx + dy * dy)
-
-        if dist > self._radius + 10 or dist < self._radius * 0.25:
-            return
-
-        angle = math.degrees(math.atan2(dy, dx))
-        # Convert angle to key index (0-11)
-        index = int(((angle + 90) % 360) / 30) % 12
-        if index < 12:
-            self._selected_key = CAMELOT_KEYS[index]
-
-    def _tick(self):
-        if not self.winfo_exists():
-            return
-        self._phase = (self._phase + 1) % 360
-        self._render()
-        self.after(80, self._tick)
-
-    def _render(self):
-        c = self._canvas
-        c.delete("all")
-        cx = self._diameter / 2
-        cy = self._diameter / 2
+    def _draw(self):
+        self.delete("all")
+        cx = self.winfo_width() / 2
+        cy = self.winfo_height() / 2
         r = self._radius
 
-        # Outer ring
-        c.create_oval(cx - r - 4, cy - r - 4, cx + r + 4, cy + r + 4,
-                       outline=GLASS_BORDER, width=1)
+        # Draw wheel
+        self.create_oval(cx-r, cy-r, cx+r, cy+r, fill=BG, outline=BORDER, width=2)
 
-        # Inner ring
-        c.create_oval(cx - r * 0.3, cy - r * 0.3, cx + r * 0.3, cy + r * 0.3,
-                       outline=SCOPE_DIM, width=1)
-
-        # 12 slices
-        compatible = set(self.COMPATIBLE_KEYS.get(self._selected_key, []))
-
+        # Draw 12 segments
         for i in range(12):
-            start_angle = -90 + i * 30
-            end_angle = start_angle + 30
-            key = CAMELOT_KEYS[i]
-            color_idx = i % 12
+            angle = math.radians(i * 30 - 90)
+            x = cx + math.cos(angle) * (r - 15)
+            y = cy + math.sin(angle) * (r - 15)
+            key = f"{i+1}A"
+            self.create_text(x, y, text=key, fill=TEXT_DIM, font=("Consolas", 7))
 
-            # Determine fill
-            is_compatible = key in compatible
-            is_selected = key == self._selected_key
-            is_deck_a = key == self._deck_a_key
-            is_deck_b = key == self._deck_b_key
+        # Highlight active keys
+        if self._deck_a_key:
+            self._draw_key_highlight(cx, cy, r, self._deck_a_key, BLUE_BRIGHT)
+        if self._deck_b_key:
+            self._draw_key_highlight(cx, cy, r, self._deck_b_key, RED)
 
-            if is_selected:
-                fill_color = safe_alpha(ACCENT, 0.25)
-            elif is_compatible:
-                fill_color = safe_alpha(CAMELOT_COLORS[color_idx], 0.12)
-            else:
-                fill_color = BOOTH_BG
-
-            # Draw slice
-            c.create_arc(
-                cx - r, cy - r, cx + r, cy + r,
-                start=start_angle, extent=30,
-                fill=fill_color,
-                outline=safe_alpha(CAMELOT_COLORS[color_idx], 0.19),
-                width=1,
-            )
-
-            # Key label
-            label_r = r * 0.7
-            label_angle = math.radians(start_angle + 15)
-            lx = cx + math.cos(label_angle) * label_r
-            ly = cy + math.sin(label_angle) * label_r
-
-            text_color = ACCENT if is_selected else (
-                CAMELOT_COLORS[color_idx] if is_compatible else MUTED
-            )
-            font_size = 9 if is_selected else 7
-
-            c.create_text(
-                lx, ly,
-                text=key,
-                fill=text_color,
-                font=("Segoe UI", font_size, "bold" if is_selected else ""),
-            )
-
-            # Deck markers
-            marker_r = r * 0.5
-            mx = cx + math.cos(label_angle) * marker_r
-            my = cy + math.sin(label_angle) * marker_r
-
-            if is_deck_a:
-                c.create_text(mx, my - 4, text="A", fill=SCOPE_GREEN,
-                              font=("Segoe UI", 7, "bold"))
-            if is_deck_b:
-                c.create_text(mx, my + 6, text="B", fill=SCOPE_BLUE,
-                              font=("Segoe UI", 7, "bold"))
-
-        # Center text
-        c.create_text(cx, cy - 6, text=self._selected_key, fill=ACCENT,
-                       font=("Segoe UI", 16, "bold"))
-        c.create_text(cx, cy + 12, text="KEY", fill=MUTED,
-                       font=("Segoe UI", 8))
+    def _draw_key_highlight(self, cx, cy, r, key, color):
+        try:
+            num = int(key[:-1])
+            letter = key[-1]
+            idx = num - 1 if letter == "A" else num - 1 + 12
+            angle = math.radians(idx * 30 - 90)
+            x = cx + math.cos(angle) * (r - 15)
+            y = cy + math.sin(angle) * (r - 15)
+            self.create_oval(x-8, y-8, x+8, y+8, fill=color, outline="")
+            self.create_text(x, y, text=key, fill="white", font=("Consolas", 7, "bold"))
+        except Exception:
+            pass
 
 
-# ============================================================
-# VUMeter — analog-style level meter
-# ============================================================
-
-class VUMeter(ctk.CTkFrame):
-    """Vertical analog-style VU meter with dB scale."""
-
-    def __init__(self, master, height=120, width=24, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
-
-        self._height = height
-        self._width = width
-        self._level = 0.0
-        self._peak = 0.0
-        self._phase = 0
-
-        self._canvas = tk.Canvas(
-            self,
-            width=width + 30,
-            height=height,
-            bg=BOOTH_BG,
-            highlightthickness=0,
-        )
-        self._canvas.pack()
-
-        self.after(50, self._tick)
-
-    def set_level(self, level):
-        self._level = max(0, min(1, float(level)))
-
-    def _tick(self):
-        if not self.winfo_exists():
-            return
-        self._phase = (self._phase + 3) % 360
-        # Decay peak
-        self._peak = max(self._level, self._peak * 0.95)
-        self._render()
-        self.after(40, self._tick)
-
-    def _render(self):
-        c = self._canvas
-        c.delete("all")
-        h = self._height
-        w = self._width
-
-        # Meter background
-        c.create_rectangle(4, 2, w + 4, h - 2, fill="#0A0E18", outline=GLASS_BORDER)
-
-        # Level bars
-        bar_h = int(h * self._level)
-        for i in range(bar_h):
-            y = h - 4 - i
-            t = i / max(1, h - 8)
-            if t > 0.85:
-                color = DANGER
-            elif t > 0.65:
-                color = WARNING
-            else:
-                color = SUCCESS
-            c.create_line(5, y, w + 3, y, fill=color, width=1)
-
-        # Peak marker
-        peak_y = h - 4 - int(h * self._peak)
-        c.create_line(5, peak_y, w + 3, peak_y, fill="#FFFFFF", width=2)
-
-        # dB labels
-        for db in [0, -6, -12, -24, -48]:
-            y = h - 4 - int(h * (1 + db / 48))
-            if 0 < y < h:
-                c.create_text(w + 16, y, text=str(db), fill=MUTED,
-                              font=("Segoe UI", 6), anchor="w")
-
-
-# ============================================================
-# Crossfader — visual crossfader slider
-# ============================================================
-
-class Crossfader(ctk.CTkFrame):
-    """Visual crossfader between Deck A and Deck B."""
-
-    def __init__(self, master, width=300, height=30, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
-
-        self._width = width
-        self._height = height
-        self._position = 0.5  # 0=A, 1=B
-        self._phase = 0
-
-        self._canvas = tk.Canvas(
-            self,
-            width=width,
-            height=height,
-            bg=BOOTH_BG,
-            highlightthickness=0,
-        )
-        self._canvas.pack()
-        self._canvas.bind("<Button-1>", self._on_click)
-        self._canvas.bind("<B1-Motion>", self._on_drag)
-
-        self.after(80, self._tick)
-
-    def set_position(self, pos):
-        self._position = max(0, min(1, float(pos)))
-
-    def _on_click(self, event):
-        self._position = max(0, min(1, event.x / self._width))
-
-    def _on_drag(self, event):
-        self._position = max(0, min(1, event.x / self._width))
-
-    def _tick(self):
-        if not self.winfo_exists():
-            return
-        self._phase = (self._phase + 2) % 360
-        self._render()
-        self.after(60, self._tick)
-
-    def _render(self):
-        c = self._canvas
-        c.delete("all")
-        w = self._width
-        h = self._height
-        mid_y = h / 2
-
-        # Track
-        c.create_rectangle(0, mid_y - 3, w, mid_y + 3,
-                           fill="#0A1020", outline=GLASS_BORDER)
-
-        # Active fill
-        fill_w = int(w * self._position)
-        if fill_w > 0:
-            # Gradient from green (A) to blue (B)
-            for x in range(0, fill_w, 2):
-                t = x / max(1, w)
-                r = int(0 + 34 * t)
-                g = int(255 - 44 * t)
-                b = int(163 + 92 * t)
-                color = f"#{r:02x}{g:02x}{b:02x}"
-                c.create_line(x, mid_y - 2, x + 2, mid_y + 2, fill=color, width=3)
-
-        # Handle
-        handle_x = int(w * self._position)
-        handle_r = 8 + 2 * math.sin(math.radians(self._phase * 2))
-        c.create_oval(
-            handle_x - handle_r, mid_y - handle_r,
-            handle_x + handle_r, mid_y + handle_r,
-            fill=ACCENT,
-            outline="#FFFFFF",
-            width=2,
-        )
-
-        # Labels
-        c.create_text(12, h - 2, text="A", fill=SCOPE_GREEN,
-                       font=("Segoe UI", 8, "bold"), anchor="sw")
-        c.create_text(w - 12, h - 2, text="B", fill=SCOPE_BLUE,
-                       font=("Segoe UI", 8, "bold"), anchor="se")
-
-
-# ============================================================
-# SetEnergyCurve — energy flow across the set
-# ============================================================
-
-class SetEnergyCurve(ctk.CTkFrame):
-    """Energy flow visualization across the entire set."""
-
-    def __init__(self, master, width=600, height=60, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
-
-        self._width = width
-        self._height = height
-        self._phase = 0
-        self._energies = []
-        self._current_index = 0
-
-        self._canvas = tk.Canvas(
-            self,
-            width=width,
-            height=height,
-            bg=BOOTH_BG,
-            highlightthickness=0,
-        )
-        self._canvas.pack()
-
-        self.after(80, self._tick)
-
-    def set_energies(self, energies, current_index=0):
-        self._energies = list(energies or [])
-        self._current_index = current_index
-
-    def _tick(self):
-        if not self.winfo_exists():
-            return
-        self._phase = (self._phase + 1) % 360
-        self._render()
-        self.after(80, self._tick)
-
-    def _render(self):
-        c = self._canvas
-        c.delete("all")
-        w = self._width
-        h = self._height
-
-        if not self._energies:
-            c.create_text(w / 2, h / 2, text="ENERGY FLOW — set olusturunca gorunur",
-                           fill=MUTED, font=("Segoe UI", 9))
-            return
-
-        n = len(self._energies)
-        step = max(1, w // max(1, n))
-
-        # Fill area under curve
-        points = []
-        for i, energy in enumerate(self._energies):
-            x = int(i * step + step / 2)
-            y = h - 8 - int(energy * (h - 16))
-            points.append((x, y))
-
-        # Gradient fill
-        for i in range(len(points) - 1):
-            x1, y1 = points[i]
-            x2 = points[i + 1][0]
-            energy = self._energies[i]
-            t = energy
-            r = int(0 + 255 * t)
-            g = int(255 * (1 - t * 0.3))
-            b = int(163 * (1 - t))
-            color = f"#{r:02x}{g:02x}{b:02x}30"
-            c.create_rectangle(x1, y1, x2, h - 8, fill=color, outline="")
-
-        # Curve line
-        for i in range(len(points) - 1):
-            x1, y1 = points[i]
-            x2, y2 = points[i + 1]
-            energy = self._energies[i]
-            if energy > 0.7:
-                color = NEON_MAGENTA
-            elif energy > 0.4:
-                color = ACCENT
-            else:
-                color = SCOPE_BLUE
-            c.create_line(x1, y1, x2, y2, fill=color, width=2)
-
-        # Current position marker
-        if 0 <= self._current_index < len(points):
-            cx, cy = points[self._current_index]
-            pulse = 4 + 2 * math.sin(math.radians(self._phase * 3))
-            c.create_oval(cx - pulse, cy - pulse, cx + pulse, cy + pulse,
-                           fill=ACCENT, outline="#FFFFFF", width=2)
-
-        # Phase labels
-        labels = ["WARMUP", "GROOVE", "PEAK", "COOL"]
-        for i, label in enumerate(labels):
-            x = int((i + 0.5) * w / len(labels))
-            c.create_text(x, h - 2, text=label, fill=MUTED,
-                           font=("Segoe UI", 7), anchor="s")
+# Old widget names for backward compat
+GlassCard = None  # Will be imported from glass.py if needed
