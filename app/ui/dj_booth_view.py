@@ -22,6 +22,7 @@ class DJBoothView:
 
     def __init__(self, win):
         self.win = win
+        self._vu_phase = 0
 
     def build(self, parent):
         win = self.win
@@ -177,6 +178,17 @@ class DJBoothView:
         # Load initial data
         self._refresh_from_decks()
 
+    def _animated_vu(self, base_level):
+        """Simulate a live, beat-synced VU signal around a track's energy."""
+        import math
+        self._vu_phase += 1
+        ph = self._vu_phase
+        beat = math.sin(ph * 0.9) * 0.18          # slow beat envelope
+        ripple = math.sin(ph * 2.7 + 1.3) * 0.08  # high-frequency ripple
+        base = float(base_level or 0.4)
+        level = max(0.05, min(1.0, base * 0.55 + 0.45 + beat + ripple))
+        return level
+
     def _refresh_from_decks(self):
         """Load data from the main window's deck engine."""
         win = self.win
@@ -199,7 +211,9 @@ class DJBoothView:
             self.waveform_a.set_info(bpm=bpm, key=key)
             if deck_a.get("waveform"):
                 self.waveform_a.set_waveform(deck_a["waveform"])
-                self.vu_a.set_level(deck_a.get("energy", 0.5))
+                self.vu_a.set_level(self._animated_vu(deck_a.get("energy", 0.5)))
+        else:
+            self.vu_a.set_level(0.0)
 
         # Update Deck B
         if deck_b:
@@ -213,7 +227,9 @@ class DJBoothView:
             self.waveform_b.set_info(bpm=bpm, key=key)
             if deck_b.get("waveform"):
                 self.waveform_b.set_waveform(deck_b["waveform"])
-                self.vu_b.set_level(deck_b.get("energy", 0.5))
+                self.vu_b.set_level(self._animated_vu(deck_b.get("energy", 0.5)))
+        else:
+            self.vu_b.set_level(0.0)
 
         # BPM match
         bpm_a = deck_a.get("bpm", 0)
