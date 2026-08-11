@@ -989,6 +989,18 @@ class MainWindow(ctk.CTk):
 
     def clear_content(self):
 
+        # Stop any live beat stream before the panel widget is destroyed,
+        # so leaving the Live view doesn't leave audio running in the void.
+        try:
+            panel = getattr(self, "_live_beat_panel", None)
+            if panel is not None:
+                if hasattr(panel, "winfo_exists") and panel.winfo_exists():
+                    if getattr(panel, "_running", False):
+                        panel.stop()
+                self._live_beat_panel = None
+        except Exception:
+            pass
+
         for child in self.content.winfo_children():
             child.destroy()
 
@@ -5470,6 +5482,21 @@ class MainWindow(ctk.CTk):
             font=("Segoe UI", 20, "bold"),
             text_color=TEXT
         ).pack(anchor="w", pady=18)
+
+        # Real-time beat production studio — live streaming beat with
+        # parameter control and AI ear analysis.
+        try:
+            from app.ui.beat_live_panel import BeatLivePanel
+            cached = getattr(self, "_live_beat_panel", None)
+            if cached is None or not cached.winfo_exists():
+                self._live_beat_panel = BeatLivePanel(
+                    self.content,
+                    beat_studio=getattr(self, "_beat_studio", None),
+                    ai_ear=None,
+                )
+            self._live_beat_panel.pack(fill="both", expand=True, pady=(8, 0))
+        except Exception as e:
+            self.log(f"BEAT LIVE PANEL: {e}")
 
     def build_ai_memory_view(self):
 
