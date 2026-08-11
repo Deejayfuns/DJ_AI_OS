@@ -238,16 +238,40 @@ class MainWindow(ctk.CTk):
         self.after(1700, self.destroy)
 
     def _speak_farewell(self):
-        """Fire-and-forget Turkish farewell through Windows SAPI so the
-        window can close instantly while the voice finishes on its own."""
+        """Fire-and-forget farewell through Windows SAPI so the window can
+        close instantly while the voice finishes on its own. The spoken
+        line follows the active UI language."""
         try:
+            # Prefer the in-app voice runtime (edge-tts follows language);
+            # fall back to Windows SAPI with a localized line.
+            try:
+                lang = get_language()
+                voice = self.voice_assistant.runtime
+                if voice is not None:
+                    voice.set_language(lang)
+                    spoken = t("boot.farewell")
+                    import threading as _t
+                    _t.Thread(
+                        target=lambda: voice.speak(spoken),
+                        daemon=True,
+                    ).start()
+                    return
+            except Exception:
+                pass
+
             import subprocess
+            line = {
+                "tr": "Sistem kapaniyor kaptan. Gorusmek uzere.",
+                "en": "System shutting down captain. See you soon.",
+                "de": "System fährt herunter Captain. Bis bald.",
+                "fr": "Système en arrêt capitaine. À bientôt.",
+            }.get(get_language(), "Sistem kapaniyor kaptan. Gorusmek uzere.")
             ps = (
                 "Add-Type -AssemblyName System.Speech;"
                 "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer;"
                 "try{$s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Female)}catch{};"
                 "$s.Rate=1;$s.Volume=90;"
-                "$s.Speak('Sistem kapaniyor kaptan. Gorusmek uzere.')"
+                f"$s.Speak('{line}')"
             )
             subprocess.Popen(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],

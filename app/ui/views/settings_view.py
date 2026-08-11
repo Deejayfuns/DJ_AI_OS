@@ -44,6 +44,13 @@ class SettingsView(ViewBase):
         def on_lang_change(choice):
             if set_language(choice):
                 win.log(t("messages.language_changed", lang=choice))
+                # Sync the voice assistant's TTS language so ASTRA speaks
+                # in the newly selected language (tr -> AhmetNeural, etc.)
+                try:
+                    if hasattr(win, "voice_assistant") and win.voice_assistant:
+                        win.voice_assistant.set_language(choice)
+                except Exception:
+                    pass
                 # Rebuild sidebar to reflect language change
                 if hasattr(win, "sidebar"):
                     win.sidebar._build()
