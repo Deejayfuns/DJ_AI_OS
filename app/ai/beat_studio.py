@@ -510,11 +510,17 @@ class BeatStudio:
                 wf.writeframes(data.tobytes())
 
         elif bit_depth == 24:
-            # 24-bit: convert to int32 then pack as 3 bytes per sample
+            # 24-bit: convert to int32 then pack as 3 bytes per sample.
+            # Use a preallocated bytearray — per-sample bytes concatenation
+            # is O(n^2) and blows up memory on long mixes.
             int32_data = np.int32(mix * 8388607)
-            raw = b""
-            for val in int32_data:
-                raw += int(val).to_bytes(3, byteorder="little", signed=True)
+            raw = bytearray(len(int32_data) * 3)
+            for i, val in enumerate(int32_data):
+                v = int(val) & 0xFFFFFF
+                j = i * 3
+                raw[j] = v & 0xFF
+                raw[j + 1] = (v >> 8) & 0xFF
+                raw[j + 2] = (v >> 16) & 0xFF
             with wave.open(path, "w") as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(3)
