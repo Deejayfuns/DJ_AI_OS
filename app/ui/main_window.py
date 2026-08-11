@@ -1034,6 +1034,21 @@ class MainWindow(ctk.CTk):
         except Exception:
             pass
 
+        # Same for the Live Performance panel — halt its audio stream and
+        # drop the cached refs so a later astra_chat scene command rebuilds
+        # it instead of mounting onto a destroyed widget.
+        try:
+            panel = getattr(self, "_live_perf_panel", None)
+            if panel is not None:
+                if hasattr(panel, "winfo_exists") and panel.winfo_exists():
+                    if getattr(panel, "_running", False):
+                        panel.stop()
+                self._live_perf_panel = None
+                if getattr(self, "live_perf_panel", None) is panel:
+                    self.live_perf_panel = None
+        except Exception:
+            pass
+
         for child in self.content.winfo_children():
             child.destroy()
 
