@@ -31,6 +31,13 @@ DJ_COMMERCIAL/
 
 # Lisans
 license.key
+# Vendor private key (YALNIZCA vendor makinesi — asla commit etme)
+vendor_private_key.pem
+# Geliştirici tam-lisans bayrağı (owner_dev_mode için açık kapı)
+dev.flag
+# Environment files
+.env
+.env.local
 
 # Paketleme / arşiv
 dj_ai_os.zip
@@ -43,3 +50,16 @@ generated_beat_*.wav
 
 # Bulut indirme önbelleği (çalışma anında üretilir)
 DJ_CLOUD_DOWNLOADS/
+
+# Update üretim çıktıları (tools/build_manifest.py)
+updates/
+
+# Boot / teşhis çıktıları (hata ayıklama sırasında üretilir)
+*_probe.py
+*_probe_out.txt
+boot_out*.txt
+boot_test_out*.txt
+mw_test*.txt
+launch_*.log
+boot_selftest_out.txt
+boot_selftest_stdout.log

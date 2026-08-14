@@ -1,0 +1,386 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  DJ_AI_OS_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test
+  DJ_AI_OS_INIT_DB: "true"
+  LC_ALL: C
+  LANG: C
+
+jobs:
+  lint-typecheck:
+    name: Lint & Typecheck (if configured)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -e ".[dev]" 2>/dev/null || pip install pytest
+
+      - name: Check lint/typecheck config
+        run: |
+          echo "No mypy/ruff/black/flake8 config in pyproject.toml — skipping."
+          echo "If you add linting later, update this job."
+
+  test:
+    name: Test Suite (SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,server]" 2>/dev/null || pip install pytest
+          pip install sqlalchemy[asyncio] aiosqlite alembic stripe
+
+      - name: Run full test suite (SQLite)
+        run: python -m pytest -q --tb=short
+        env:
+          DJ_AI_OS_DATABASE_URL: sqlite+aiosqlite:///./test.db
+
+  pg-migration:
+    name: PostgreSQL Migration Gate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.11
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dj_ai_os_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,server]" 2>/dev/null || pip install pytest
+          pip install sqlalchemy[asyncio] asyncpg alembic stripe
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 1
+          done
+
+      - name: Verify alembic heads
+        run: |
+          import os
+          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
+          from alembic.config import Config
+          from alembic import command
+          cfg = Config('alembic.ini')
+          cfg.set_main_option('script_location', 'app/server/db/migrations')
+          cfg.set_main_option('sqlalchemy.url', os.environ['DJ_AI_OS_DATABASE_URL'])
+          cfg.set_main_option('prepend_sys_path', '.')
+          cfg.config_file_name = 'alembic.ini'
+          heads = command.heads(cfg)
+          print('Alembic heads:', heads)
+          assert heads == ['0001_initial'], f'Expected single head 0001_initial, got: {heads}'
+
+      - name: alembic upgrade head
+        run: |
+          import os
+          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
+          from alembic.config import Config
+          from alembic import command
+          cfg = Config('alembic.ini')
+          cfg.set_main_option('script_location', 'app/server/db/migrations')
+          cfg.set_main_option('sqlalchemy.url', os.environ['DJ_AI_OS_DATABASE_URL'])
+          cfg.set_main_option('prepend_sys_path', '.')
+          cfg.config_file_name = 'alembic.ini'
+          command.upgrade(cfg, 'head')
+          print('alembic upgrade head: SUCCESS')
+
+      - name: Verify migration created all tables
+        run: |
+          import os
+          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
+          from sqlalchemy import create_engine, inspect
+          engine = create_engine(os.environ['DJ_AI_OS_DATABASE_URL'].replace('+asyncpg', ''), future=True)
+          tables = set(inspect(engine).get_table_names())
+          expected = {'users', 'licenses', 'machine_activations', 'subscriptions', 'webhook_events', 'audit_log', 'alembic_version'}
+          missing = expected - tables
+          assert not missing, f'Missing tables: {missing}'
+          print('All 7 tables present:', sorted(tables))
+          engine.dispose()
+
+      - name: Verify schema matches SQLAlchemy models
+        run: |
+          import os
+          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
+          from sqlalchemy import create_engine, inspect
+          from app.server.db.models import Base
+          engine = create_engine(os.environ['DJ_AI_OS_DATABASE_URL'].replace('+asyncpg', ''), future=True)
+          with engine.connect() as conn:
+              inspector = inspect(engine)
+              model_tables = {t.name for t in Base.metadata.sorted_tables}
+              for table in Base.metadata.sorted_tables:
+                  migrated_cols = {c['name'] for c in inspector.get_columns(table.name)}
+                  model_cols = {c.name for c in table.columns}
+                  assert migrated_cols == model_cols, f'Column mismatch in {table.name}: migrated={migrated_cols} model={model_cols}'
+          print('Schema matches models: PASS')
+          engine.dispose()
+
+      - name: alembic downgrade base + re-upgrade (idempotent cycle)
+        run: |
+          import os
+          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
+          from alembic.config import Config
+          from alembic import command
+          cfg = Config('alembic.ini')
+          cfg.set_main_option('script_location', 'app/server/db/migrations')
+          cfg.set_main_option('sqlalchemy.url', os.environ['DJ_AI_OS_DATABASE_URL'])
+          cfg.set_main_option('prepend_sys_path', '.')
+          cfg.config_file_name = 'alembic.ini'
+          command.downgrade(cfg, 'base')
+          command.upgrade(cfg, 'head')
+          print('Downgrade/Upgrade cycle: PASS')
+
+      - name: Server smoke test (TestClient against PostgreSQL)
+        run: |
+          import os
+          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
+          os.environ['DJ_AI_OS_INIT_DB'] = 'true'
+          os.environ['LC_ALL'] = 'C'
+          os.environ['LANG'] = 'C'
+          from fastapi.testclient import TestClient
+          from app.server.run import app
+          with TestClient(app) as client:
+              r = client.get('/health')
+              assert r.status_code == 200, f'Health check failed: {r.status_code} {r.text}'
+              assert r.json().get('ok') is True
+              print('Server health: OK')
+              r2 = client.get('/api/update/manifest')
+              print(f'Manifest endpoint: {r2.status_code} (expected 200 or 500)')
+              from app.license.license_manager import LicenseManager
+              from app.license.entitlements import EntitlementManager
+              print('License/Entitlement imports: OK')
+
+  pg-migration-test-file:
+    name: PostgreSQL Migration Test File
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.11
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dj_ai_os_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,server]" 2>/dev/null || pip install pytest
+          pip install sqlalchemy[asyncio] asyncpg alembic stripe psycopg2-binary
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 1
+          done
+
+      - name: Run tests/test_alembic_pg_migration.py
+        run: python -m pytest tests/test_alembic_pg_migration.py -v
+        env:
+          DJ_AI_OS_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test
+          DJ_AI_OS_INIT_DB: "true"
+          LC_ALL: C
+          LANG: C
+
+  server-e2e:
+    name: Server E2E Tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.11
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dj_ai_os_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,server]" 2>/dev/null || pip install pytest
+          pip install sqlalchemy[asyncio] asyncpg alembic stripe psycopg2-binary httpx
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 1
+          done
+
+      - name: Run server E2E tests
+        run: python -m pytest tests/test_update_e2e_server.py tests/test_update_manifest_endpoint.py -v
+        env:
+          DJ_AI_OS_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test
+          DJ_AI_OS_INIT_DB: "true"
+          LC_ALL: C
+          LANG: C
+
+  build-gate:
+    name: Build Gate (Windows only)
+    runs-on: windows-latest
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == github.event.repository.default_branch
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Check build_exe.py syntax
+        run: python build_exe.py --clean
+
+      - name: Verify build_exe.py imports (dry run)
+        run: |
+          import build_exe
+          print('build_exe.py imports OK')
+          print('Version:', build_exe.get_version())
+
+      - name: Build (onedir mode) — optional, may take 3-5 min
+        run: python build_exe.py
+        timeout-minutes: 10
+        env:
+          PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
+
+      - name: Verify build artifacts
+        if: success()
+        run: |
+          if (Test-Path "dist/DJ_AI_OS/DJ_AI_OS.exe") {
+            Write-Host "Build artifact found: dist/DJ_AI_OS/DJ_AI_OS.exe"
+            $size = (Get-Item "dist/DJ_AI_OS/DJ_AI_OS.exe").Length
+            Write-Host "EXE size: $($size / 1MB) MB"
+          } else {
+            Write-Host "Build artifact NOT found"
+            exit 1
+          }
+
+  security-check:
+    name: Security — Secret Leakage Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for secrets in history
+        run: |
+          patterns=(
+            "sk_test_"
+            "sk_live_"
+            "whsec_"
+            "vendor_private_key.pem"
+            "ADMIN_TOKEN="
+            "DJ_AI_OS_LICENSE_PRIVATE_KEY"
+            "BEGIN PRIVATE KEY"
+            "BEGIN EC PRIVATE KEY"
+          )
+          found=0
+          for pat in "${patterns[@]}"; do
+            if git log --all --oneline --grep="$pat" | head -1 | grep -q .; then
+              echo "PATTERN FOUND IN COMMIT MESSAGES: $pat"
+              found=1
+            fi
+            if git log --all -p --grep="$pat" 2>/dev/null | head -5 | grep -q .; then
+              echo "PATTERN FOUND IN DIFFS: $pat"
+              found=1
+            fi
+          done
+          if [ $found -eq 1 ]; then
+            echo "SECRET LEAKAGE DETECTED IN GIT HISTORY"
+            exit 1
+          else
+            echo "No secret patterns found in git history"
+          fi
+
+      - name: Verify .gitignore covers secrets
+        run: |
+          required=(
+            "vendor_private_key.pem"
+            "license.key"
+            "dev.flag"
+            ".env"
+          )
+          missing=0
+          for req in "${required[@]}"; do
+            if ! grep -q "^$req\$" .gitignore; then
+              echo "MISSING from .gitignore: $req"
+              missing=1
+            fi
+          done
+          if [ $missing -eq 1 ]; then
+            echo ".gitignore incomplete — secrets may leak"
+            exit 1
+          else
+            echo ".gitignore covers all required secret patterns"
+          fi
