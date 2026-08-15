@@ -8,6 +8,8 @@ class LicenseSchema:
             "expiry",
             "max_tracks",
             "updates_until",
+            "issued_at",
+            "nonce",
             "signature"
         ]
 
