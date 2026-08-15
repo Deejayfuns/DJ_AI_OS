@@ -20,17 +20,21 @@ SPEC_FILE = PROJECT_ROOT / "DJ_AI_OS.spec"
 
 
 def get_version():
-    """Get version from pyproject.toml or use default."""
-    pyproject = PROJECT_ROOT / "pyproject.toml"
-    if pyproject.exists():
-        try:
-            import tomllib
-            with open(pyproject, "rb") as f:
-                data = tomllib.load(f)
-                return data.get("project", {}).get("version", "1.0.0")
-        except Exception:
-            pass
-    return "1.0.0"
+    """Get version from app/config/version.py (sürüm tek kaynağı)."""
+    try:
+        import importlib.util
+        import sys
+        # Repo root'u sys.path'e ekle ki paketlenmeden de import edilsin.
+        if str(PROJECT_ROOT) not in sys.path:
+            sys.path.insert(0, str(PROJECT_ROOT))
+        spec = importlib.util.spec_from_file_location(
+            "djaios_version", PROJECT_ROOT / "app" / "config" / "version.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return getattr(module, "APP_VERSION", "1.0.0")
+    except Exception:
+        return "1.0.0"
 
 
 def clean_artifacts():
@@ -66,13 +70,13 @@ def build(onefile=False):
     try:
         subprocess.run(cmd, cwd=PROJECT_ROOT, check=True)
         version = get_version()
-        print("\n✅ Build successful!")
+        print("\n[OK] Build successful!")
         if onefile:
-            print(f"📦 {PROJECT_ROOT / 'dist' / f'DJ_AI_OS_v{version}.exe'}")
+            print(f"[OK] Output: {PROJECT_ROOT / 'dist' / f'DJ_AI_OS_v{version}.exe'}")
         else:
             dist_dir = PROJECT_ROOT / "dist" / "DJ_AI_OS"
-            print(f"📦 Output: {dist_dir}")
-            print(f"🚀 Run: {dist_dir / 'DJ_AI_OS.exe'}")
+            print(f"[OK] Output: {dist_dir}")
+            print(f"[OK] Run: {dist_dir / 'DJ_AI_OS.exe'}")
     except subprocess.CalledProcessError as e:
         print(f"\n❌ Build failed (exit {e.returncode})")
         sys.exit(1)

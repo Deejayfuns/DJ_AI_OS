@@ -1,5 +1,7 @@
 customtkinter
 mutagen
+# Lisans + update manifest imza doğrulama (Ed25519)
+cryptography
 pygame
 librosa
 numpy
@@ -26,5 +28,14 @@ pyyaml
 msgpack
 watchdog
 zeroconf
+
+# Database (Faz3)
+sqlalchemy[asyncio]
+asyncpg           # PostgreSQL async driver
+aiosqlite         # SQLite async driver (dev)
+alembic
+
+# Payments (Faz3)
+stripe
 # Song Vault (premium) — high-quality download engine
 yt-dlp
