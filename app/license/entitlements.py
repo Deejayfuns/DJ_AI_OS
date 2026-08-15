@@ -84,21 +84,56 @@ class EntitlementManager:
         },
     }
 
+    # Module to plan mapping for comparison table
+    MODULE_PLAN_MAP = {
+        # DEMO modules
+        "Performance Dashboard": "DEMO",
+        "Dashboard": "DEMO",
+        "Müzik Doktoru (Analiz)": "DEMO",
+        "Kütüphane": "DEMO",
+        "Arşiv Koruyucu": "DEMO",
+        "Set Oluşturucu": "DEMO",
+        "Beat Studio": "DEMO",
+        "Song Vault": "DEMO",
+        "DJ Coach": "DEMO",
+        "Kütüphane Haritası": "DEMO",
+        "Astra Chat": "DEMO",
+        "Hesap": "DEMO",
+        "Ayarlar": "DEMO",
+        # PRO modules
+        "Deck Studio": "PRO",
+        "DJ Booth": "PRO",
+        "Canlı Performans": "PRO",
+        "Pioneer Link": "PRO",
+        "Akıllı Set": "PRO",
+        "DJ Profili": "PRO",
+        # DJ_ARCHIVE modules
+        "Remix Lab": "DJ_ARCHIVE",
+        "Cloud Export": "DJ_ARCHIVE",
+        # STUDIO modules
+        "Nöral Sentez": "STUDIO",
+        "Nöral Köprü": "STUDIO",
+    }
+
     PRICING = {
         "PRO": {
-            "monthly_usd": 19,
+            "monthly_usd": 9.99,
+            "yearly_usd": 99,
             "headline": "Professional library AI and Rekordbox preparation.",
         },
         "DJ_ARCHIVE": {
-            "monthly_usd": 49,
+            "monthly_usd": 19.99,
+            "yearly_usd": 199.99,
             "headline": "Pro tools plus monthly DJ archive downloads.",
         },
         "STUDIO": {
-            "monthly_usd": 99,
+            "monthly_usd": 39.99,
+            "yearly_usd": 399.99,
             "headline": "Multi-DJ studio workflow, admin controls, cloud AI.",
         },
         "ENTERPRISE": {
             "monthly_usd": None,
+            "yearly_usd": None,
             "headline": "Custom licensing for agencies, venues, and schools.",
         },
     }
@@ -125,9 +160,22 @@ class EntitlementManager:
 
         return bool(self.entitlements_for(plan).get(feature))
 
+    # Max machine activations per plan (enforced server-side)
+    MAX_MACHINES = {
+        "PRO": 3,
+        "DJ_ARCHIVE": 5,
+        "STUDIO": 10,
+        "ENTERPRISE": 50,
+        "OWNER_DEV": 100,
+    }
+
     def pricing_table(self):
 
         return self.PRICING
+
+    def module_plan_map(self):
+        """Return module to minimum plan mapping for comparison table."""
+        return self.MODULE_PLAN_MAP
 
     def updates_active(self, updates_until):
 

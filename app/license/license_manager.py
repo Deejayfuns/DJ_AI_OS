@@ -1,11 +1,11 @@
 import json
-import hashlib
 import os
 from datetime import datetime
 
 from app.license.machine_id import MachineID
 from app.license.license_schema import LicenseSchema
 from app.license.entitlements import EntitlementManager
+from app.license import signature as sig
 
 
 class LicenseManager:
@@ -18,7 +18,6 @@ class LicenseManager:
 
         self.license_file = "license.key"
 
-        self.trial_limit = 10000
         self.owner_dev_mode = self.detect_owner_dev_mode()
 
     # -------------------------
@@ -27,14 +26,9 @@ class LicenseManager:
 
     def generate_signature(self, data):
 
-        raw = json.dumps(
-            data,
-            sort_keys=True
-        )
-
-        return hashlib.sha256(
-            raw.encode()
-        ).hexdigest()
+        # Ed25519 imzası — YALNIZCA vendor makinesinde çalışır (private key gerekir).
+        # Client'ta asla imza üretilmez; sadece doğrulanır.
+        return sig.sign(data)
 
     # -------------------------
     # LICENSE VALIDATION
@@ -48,7 +42,7 @@ class LicenseManager:
 
                 return json.load(f)
 
-        except:
+        except Exception:
 
             return None
 
@@ -74,15 +68,24 @@ class LicenseManager:
         # MACHINE CHECK
         current_machine = self.machine.generate()
 
-        if license_data["machine_id"] != current_machine:
+        if license_data.get("machine_id") != current_machine:
 
             return False, "WRONG MACHINE"
 
-        # EXPIRY CHECK
-        expiry = datetime.strptime(
-            license_data["expiry"],
-            "%Y-%m-%d"
-        )
+        # SIGNATURE CHECK — client gömülü vendor public key ile doğrular.
+        # Forge için private key gerekir; bu key client'ta asla bulunmaz.
+        if not sig.verify(license_data, license_data.get("signature", "")):
+
+            return False, "INVALID SIGNATURE"
+
+        # EXPIRY CHECK (hazırlıksız parse artık boot'u çökertmez)
+        try:
+            expiry = datetime.strptime(
+                license_data.get("expiry", ""),
+                "%Y-%m-%d"
+            )
+        except (ValueError, TypeError):
+            return False, "INVALID EXPIRY"
 
         if datetime.now() > expiry:
 
@@ -111,7 +114,8 @@ class LicenseManager:
                 "licensed": False,
                 "plan": "DEMO",
                 "reason": reason,
-                "max_tracks": self.trial_limit,
+                # DEMO limitini entitlements tek kaynağından al (tutarsızlık düzeltildi)
+                "max_tracks": self.entitlements.PLAN_FEATURES["DEMO"]["max_tracks"],
                 "updates_until": None
             }
             plan["entitlements"] = self.entitlements.entitlements_for(plan)
@@ -132,11 +136,27 @@ class LicenseManager:
 
     def detect_owner_dev_mode(self):
 
-        return (
+        # Kaynak ağacı koşulu: paketlenmiş build'de main.py+app+tests yoktur,
+        # dolayısıyla bu dal pakete asla girmez.
+        source_tree = (
             os.path.exists("main.py") and
             os.path.isdir("app") and
             os.path.isdir("tests")
         )
+        if not source_tree:
+            return False
+
+        # AÇIK bayrak: env DJ_AI_OS_DEV=1 VEYA repo-root'taki gitignored dev.flag.
+        # İkisi de yoksa DEMO çalışır — böylece demo/limit yolu geliştirirken test edilebilir.
+        env_dev = os.environ.get("DJ_AI_OS_DEV", "").strip().lower()
+        if env_dev in {"1", "true", "yes", "on"}:
+            return True
+
+        return os.path.exists("dev.flag")
+
+    def machine_id_display(self):
+
+        return self.machine.generate()
 
     def can_use(self, feature):
 
