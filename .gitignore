@@ -63,3 +63,12 @@ mw_test*.txt
 launch_*.log
 boot_selftest_out.txt
 boot_selftest_stdout.log
+
+# Build artifacts / output
+DJ_SONG_VAULT/
+admin/
+build_log.txt
+build_log2.txt
+nul
+update_manifest.json
+update_manifest_signed.json
