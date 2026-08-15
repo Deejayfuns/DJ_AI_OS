@@ -193,20 +193,31 @@ class VirtualizedTrackTable(ctk.CTkFrame):
         canvas_frame = ctk.CTkFrame(self, fg_color="transparent")
         canvas_frame.pack(fill="both", expand=True)
 
-        # Scrollbars
-        self.v_scrollbar = ctk.CTkScrollbar(
+        # Scrollbars (native tk — CTkScrollbar._draw calls update_idletasks
+        # reentrantly and can hang boot with an infinite event storm)
+        self.v_scrollbar = tk.Scrollbar(
             canvas_frame,
-            orientation="vertical",
+            orient="vertical",
             command=self._on_scrollbar,
             width=12,
+            bg=GLASS_BG,
+            troughcolor=BG,
+            activebackground=SURFACE_RAISED,
+            highlightthickness=0,
+            relief="flat",
         )
         self.v_scrollbar.pack(side="right", fill="y")
 
-        self.h_scrollbar = ctk.CTkScrollbar(
+        self.h_scrollbar = tk.Scrollbar(
             canvas_frame,
-            orientation="horizontal",
+            orient="horizontal",
             command=self._on_h_scrollbar,
-            height=12,
+            width=12,
+            bg=GLASS_BG,
+            troughcolor=BG,
+            activebackground=SURFACE_RAISED,
+            highlightthickness=0,
+            relief="flat",
         )
         self.h_scrollbar.pack(side="bottom", fill="x")
 
@@ -435,9 +446,14 @@ class VirtualizedTrackTable(ctk.CTkFrame):
             self._draw_row(c, track, idx, y, canvas_width)
             y += self.row_height
 
-        # Update scroll region
+        # Update scroll region — ONLY when the region actually changed.
+        # Tk re-evaluates the canvas view on every `-scrollregion` configure and
+        # fires yscrollcommand (→ _on_canvas_scroll → _on_scrollbar → _draw_rows),
+        # so setting an identical region every draw starts an infinite
+        # yscrollcommand ↔ _draw_rows ping-pong that wedges update()/mainloop.
         total_height = len(self._filtered_tracks) * self.row_height
-        c.configure(scrollregion=(0, 0, canvas_width, total_height))
+        if c.cget("scrollregion") != f"0 0 {canvas_width} {total_height}":
+            c.configure(scrollregion=(0, 0, canvas_width, total_height))
 
     def _draw_row(self, canvas: tk.Canvas, track: Dict, idx: int, y: float, width: float):
         """Draw a single row."""

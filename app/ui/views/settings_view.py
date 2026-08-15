@@ -27,6 +27,82 @@ class SettingsView(ViewBase):
         win.make_metric(stats, "MAX TRACKS", plan.get("max_tracks", 0))
         win.make_metric(stats, "ARCHIVED", win.total_archived)
 
+        # ================= UPDATES (yalnızca updates_active lisanslar) =================
+        updates = ctk.CTkFrame(parent, fg_color=PANEL, corner_radius=8)
+        updates.pack(fill="x", pady=12)
+
+        ctk.CTkLabel(
+            updates,
+            text="UPDATES",
+            font=("Segoe UI", 14, "bold"),
+            text_color=ACCENT
+        ).pack(anchor="w", padx=12, pady=(12, 4))
+
+        try:
+            tech_version = getattr(win, "app_tech_version", "?")
+        except Exception:
+            tech_version = "?"
+        updates_active = bool(plan.get("entitlements", {}).get("updates_active"))
+
+        ctk.CTkLabel(
+            updates,
+            text=(
+                f"Uygulama sürümü: {tech_version} | "
+                f"Güncellemeler: {'AKTİF' if updates_active else 'AKTİF DEĞİL'}"
+            ),
+            text_color=TEXT
+        ).pack(anchor="w", padx=12, pady=(0, 6))
+
+        if not updates_active:
+            ctk.CTkLabel(
+                updates,
+                text=(
+                    "Güncellemeler yalnızca lisansı aktif olan kullanıcılara "
+                    "sunulur. Paketini yenilemek için Account bölümünü kullan."
+                ),
+                text_color=MUTED,
+                wraplength=900,
+                justify="left"
+            ).pack(anchor="w", padx=12, pady=(0, 12))
+        else:
+            ctk.CTkLabel(
+                updates,
+                text="Güncelleme beklenmiyor / henüz kontrol edilmedi.",
+                text_color=MUTED
+            ).pack(anchor="w", padx=12, pady=(0, 4))
+
+            status_label = ctk.CTkLabel(
+                updates,
+                text="Son kontrol: —",
+                text_color=TEXT,
+                wraplength=900,
+                justify="left"
+            )
+            status_label.pack(anchor="w", padx=12, pady=(0, 4))
+
+            button_row = ctk.CTkFrame(updates, fg_color="transparent")
+            button_row.pack(fill="x", padx=12, pady=(0, 12))
+
+            ctk.CTkButton(
+                button_row,
+                text="GÜNCELLEME KONTROL",
+                width=180,
+                command=win.check_for_updates_ui
+            ).pack(side="left", padx=(0, 8))
+
+            apply_button = ctk.CTkButton(
+                button_row,
+                text="UYGULA",
+                width=120,
+                state="disabled",
+                command=win.apply_update_ui
+            )
+            apply_button.pack(side="left", padx=(0, 8))
+
+            # main_window handler'ları bu etiketleri günceller.
+            win.update_status_label = status_label
+            win.update_apply_button = apply_button
+
         # Language selector
         lang_frame = ctk.CTkFrame(parent, fg_color=PANEL, corner_radius=8)
         lang_frame.pack(fill="x", pady=12)

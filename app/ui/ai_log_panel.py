@@ -6,6 +6,7 @@ Dark background, green timestamps, white text.
 """
 
 import time
+import tkinter as tk
 import customtkinter as ctk
 from app.ui.theme import (
     BG, SURFACE, BORDER, GREEN, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM, F_META,
@@ -25,14 +26,35 @@ class AILogPanel(ctk.CTkFrame):
             self, text="LOG", font=("Consolas", 9), text_color=TEXT_DIM,
         ).pack(anchor="w", padx=8, pady=(6, 2))
 
-        self.text = ctk.CTkTextbox(
-            self,
-            fg_color=BG,
-            text_color=TEXT_PRIMARY,
+        # Native tk.Text (CTkTextbox creates a CTkScrollbar whose _draw()
+        # calls update_idletasks reentrantly — an infinite event storm can
+        # hang boot). Styled to match the terminal look.
+        row = tk.Frame(self, bg=BG)
+        row.pack(fill="both", expand=True, padx=6, pady=(0, 6))
+
+        self.text = tk.Text(
+            row,
+            bg=BG,
+            fg=TEXT_PRIMARY,
+            insertbackground=TEXT_PRIMARY,
+            selectbackground="#334",
+            selectforeground=TEXT_PRIMARY,
             font=("Consolas", 10),
             wrap="word",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            padx=6,
+            pady=4,
         )
-        self.text.pack(fill="both", expand=True, padx=6, pady=(0, 6))
+        sb = tk.Scrollbar(
+            row, orient="vertical", command=self.text.yview,
+            bg=SURFACE, troughcolor=BG, activebackground=BORDER,
+            highlightthickness=0, relief="flat", width=10,
+        )
+        self.text.configure(yscrollcommand=sb.set)
+        self.text.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
 
     def log(self, message):
         if not self.winfo_exists() or not self.text.winfo_exists():

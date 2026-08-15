@@ -14,6 +14,11 @@ except Exception:
 
 from app.core.i18n import t, get_language, set_language, available_languages
 
+# CTkScrollbar reentrancy guard (idempotent) — fixes the infinite
+# update_idletasks event storm that could hang boot.
+from app.core.ctk_patch import apply_ctk_patch
+apply_ctk_patch()
+
 from app.ui.sidebar import Sidebar
 from app.ui.virtual_track_table import TrackTable
 from app.ui.ai_log_panel import AILogPanel
@@ -43,50 +48,92 @@ from app.cloud.trend_recommender import TrendRecommender
 from app.cloud.dj_archive_cloud import DJArchiveCloud
 from app.cloud.commercial_api import CommercialAPIClient
 
-from app.ai.audio_brain import AudioBrain
-from app.ai.audio_analyzer import AudioAnalyzer
-from app.ai.ai_ear import AIEar
-from app.ai.club_intelligence import ClubIntelligence
-from app.ai.deck_engine import DeckEngine
-from app.ai.dj_heart import DJHeart
-from app.ai.feedback_learner import FeedbackLearner
-from app.ai.genre_review import GenreReviewStudio
-from app.ai.mix_master_doctor import MixMasterDoctor
-from app.ai.mix_master_engine import MixMasterEngine
-from app.ai.music_ai import MusicAI
-from app.ai.music_research_assistant import MusicResearchAssistant
-from app.ai.performance_planner import PerformancePlanner
-from app.ai.remix_lab import RemixLab
-from app.ai.set_engine import SetEngine
-from app.ai.show_director import ShowDirector
-from app.ai.playback_engine import PlaybackEngine
-from app.ai.voice_assistant import VoiceAssistant
-from app.ai.camera_assistant import CameraAssistant
-from app.ai.jarvis_assistant import AstraAssistant
-from app.ai.version_detector import detect_version
-from app.ai.emergency_crate import EmergencyCrate
-from app.ai.track_dna import generate_dna, dna_to_string
-from app.ai.dj_coach import DJCoach
-from app.ui.library_map import LibraryMap
-from app.ai.set_recorder import SetRecorder
-from app.ai.smart_playlist import SmartPlaylistGenerator
-from app.ui.beat_grid_view import BeatGridView
-from app.ai.track_similarity import TrackSimilarityEngine
-from app.ai.dj_profile import DJProfile
-from app.ui.enhancements import MiniPlayer, QuickStatsBar, ThemeSwitcher, show_toast
-
 from data.db.ai_library_db import AILibraryDB
 from app.license.license_manager import LicenseManager
+from app.config.version import BRAND, APP_VERSION
 
 ctk.set_appearance_mode("dark")
 
 
+# --- Lazy-load helpers for heavy AI modules (imported on first use) ---
+_AI_MODULES = {
+    "AudioBrain": ("app.ai.audio_brain", "AudioBrain"),
+    "AudioAnalyzer": ("app.ai.audio_analyzer", "AudioAnalyzer"),
+    "AIEar": ("app.ai.ai_ear", "AIEar"),
+    "ClubIntelligence": ("app.ai.club_intelligence", "ClubIntelligence"),
+    "DeckEngine": ("app.ai.deck_engine", "DeckEngine"),
+    "DJHeart": ("app.ai.dj_heart", "DJHeart"),
+    "FeedbackLearner": ("app.ai.feedback_learner", "FeedbackLearner"),
+    "GenreReviewStudio": ("app.ai.genre_review", "GenreReviewStudio"),
+    "MixMasterDoctor": ("app.ai.mix_master_doctor", "MixMasterDoctor"),
+    "MixMasterEngine": ("app.ai.mix_master_engine", "MixMasterEngine"),
+    "MusicAI": ("app.ai.music_ai", "MusicAI"),
+    "MusicResearchAssistant": ("app.ai.music_research_assistant", "MusicResearchAssistant"),
+    "PerformancePlanner": ("app.ai.performance_planner", "PerformancePlanner"),
+    "RemixLab": ("app.ai.remix_lab", "RemixLab"),
+    "SetEngine": ("app.ai.set_engine", "SetEngine"),
+    "ShowDirector": ("app.ai.show_director", "ShowDirector"),
+    "PlaybackEngine": ("app.ai.playback_engine", "PlaybackEngine"),
+    "VoiceAssistant": ("app.ai.voice_assistant", "VoiceAssistant"),
+    "CameraAssistant": ("app.ai.camera_assistant", "CameraAssistant"),
+    "AstraAssistant": ("app.ai.jarvis_assistant", "AstraAssistant"),
+    "detect_version": ("app.ai.version_detector", "detect_version"),
+    "EmergencyCrate": ("app.ai.emergency_crate", "EmergencyCrate"),
+    "generate_dna": ("app.ai.track_dna", "generate_dna"),
+    "dna_to_string": ("app.ai.track_dna", "dna_to_string"),
+    "DJCoach": ("app.ai.dj_coach", "DJCoach"),
+    "LibraryMap": ("app.ui.library_map", "LibraryMap"),
+    "SetRecorder": ("app.ai.set_recorder", "SetRecorder"),
+    "SmartPlaylistGenerator": ("app.ai.smart_playlist", "SmartPlaylistGenerator"),
+    "BeatGridView": ("app.ui.beat_grid_view", "BeatGridView"),
+    "TrackSimilarityEngine": ("app.ai.track_similarity", "TrackSimilarityEngine"),
+    "DJProfile": ("app.ai.dj_profile", "DJProfile"),
+    "MiniPlayer": ("app.ui.enhancements", "MiniPlayer"),
+    "QuickStatsBar": ("app.ui.enhancements", "QuickStatsBar"),
+    "ThemeSwitcher": ("app.ui.enhancements", "ThemeSwitcher"),
+    "show_toast": ("app.ui.enhancements", "show_toast"),
+}
+
+_AI_CLASS_CACHE = {}
+_AI_INSTANCE_CACHE = {}
+
+def _load_ai_class(name):
+    """Lazy import a heavy AI class. Returns the class."""
+    if name in _AI_CLASS_CACHE:
+        return _AI_CLASS_CACHE[name]
+    mod_path, attr = _AI_MODULES[name]
+    module = __import__(mod_path, fromlist=[attr])
+    cls = getattr(module, attr)
+    _AI_CLASS_CACHE[name] = cls
+    return cls
+
+def _get_ai_instance(name, *args, **kwargs):
+    """Lazy-load and instantiate an AI object on first use (memoized)."""
+    if name not in _AI_INSTANCE_CACHE:
+        cls = _load_ai_class(name)
+        _AI_INSTANCE_CACHE[name] = cls(*args, **kwargs)
+    return _AI_INSTANCE_CACHE[name]
+
+
 class MainWindow(ctk.CTk):
 
-    def __init__(self):
+    def __init__(self, on_boot=None):
         super().__init__()
 
-        self.app_version = "v24 ULTRA PRODUCER"
+        # Marka etiketi app/config/version.py'den (sürüm tek kaynağı)
+        self.app_version = BRAND
+        self.app_tech_version = APP_VERSION
+
+        def boot_phase(label):
+            # Live boot checkpoint: streamed to the splash console so a slow
+            # build (memory pressure) never reads as a frozen boot screen.
+            if on_boot:
+                try:
+                    on_boot(label)
+                except Exception:
+                    pass
+
+        boot_phase("PENCERE HAZIR — AI ÇEKİRDEK YÜKLENİYOR")
 
         # ================= WINDOW =================
         self.title(f"DJ AI OS {self.app_version}")
@@ -94,23 +141,33 @@ class MainWindow(ctk.CTk):
         self.minsize(1450, 850)
         self.configure(fg_color=BACKGROUND)
 
-        # ================= AI CORE =================
-        self.brain = AudioBrain()
-        self.analyzer = AudioAnalyzer()
-        self.ai_ear = AIEar()
-        self.club_intelligence = ClubIntelligence()
-        self.dj_heart = DJHeart()
-        self.music_ai = MusicAI()
-        self.research = MusicResearchAssistant()
-        self.performance_planner = PerformancePlanner()
-        self.remix_lab = RemixLab()
-        self.mix_master_doctor = MixMasterDoctor()
-        self.mix_master_engine = MixMasterEngine()
-        self.show_director = ShowDirector()
-        self.set_engine = SetEngine(self.brain)
-        self.voice_assistant = VoiceAssistant()
-        self.astra_assistant = AstraAssistant(runtime=self.voice_assistant.runtime)
-        self.camera_assistant = CameraAssistant()
+        # ================= AI CORE (lazy — created on first access) =================
+        self._brain = None
+        self._analyzer = None
+        self._ai_ear = None
+        self._club_intelligence = None
+        self._dj_heart = None
+        self._music_ai = None
+        self._research = None
+        self._performance_planner = None
+        self._remix_lab = None
+        self._mix_master_doctor = None
+        self._mix_master_engine = None
+        self._show_director = None
+        self._set_engine = None
+        self._voice_assistant = None
+        self._astra_assistant = None
+        self._camera_assistant = None
+        self._playback = None
+        self._deck_engine = None
+        self._feedback_learner = None
+        self._emergency_crate = None
+        self._dj_coach = None
+        self._set_recorder = None
+        self._smart_playlist = None
+        self._similarity_engine = None
+        self._dj_profile = None
+        self._genre_review = None
         self.astra_listener_running = False
         self.astra_listener_thread = None
         self.astra_active = False
@@ -131,21 +188,24 @@ class MainWindow(ctk.CTk):
         self.cloud_archive = DJArchiveCloud()
         self.commercial_api = CommercialAPIClient()
         self.queue = TrackQueue()
-        self.playback = PlaybackEngine(callback=self.on_now_playing)
-        self.deck_engine = DeckEngine()
-        self.feedback_learner = FeedbackLearner()
-        self.emergency_crate = EmergencyCrate()
-        self.dj_coach = DJCoach()
-        self.set_recorder = SetRecorder()
-        self.smart_playlist = SmartPlaylistGenerator()
-        self.similarity_engine = TrackSimilarityEngine()
-        self.dj_profile = DJProfile()
-        self.genre_review = GenreReviewStudio()
+        self._playback = None
+        self._deck_engine = None
+        self._feedback_learner = None
+        self._emergency_crate = None
+        self._dj_coach = None
+        self._set_recorder = None
+        self._smart_playlist = None
+        self._similarity_engine = None
+        self._dj_profile = None
+        self._genre_review = None
+
+        boot_phase("AI MOTORLARI HAZIR — SİSTEM MODÜLLERİ")
 
         # ================= DB =================
         self.db = AILibraryDB()
         self.license = LicenseManager()
         self.plan = self.license.get_plan()
+        boot_phase("VERİTABANI BAĞLANDI — KÜTÜPHANE YÜKLENİYOR")
 
         # ================= DATA =================
         self.library = []
@@ -163,6 +223,7 @@ class MainWindow(ctk.CTk):
         self.duplicate_reviews = []
         self.total_archived = len(self.archived_ids)
         self.archive_output_folder = os.path.abspath("DJ_LIBRARY_OUTPUT")
+        boot_phase("KÜTÜPHANE HAZIR — KABİN ARAYÜZÜ KURULUYOR")
 
         # ================= STATE =================
         self.current_view = "dashboard"
@@ -186,6 +247,7 @@ class MainWindow(ctk.CTk):
 
         # ================= UI =================
         self.build()
+        boot_phase("KABİN ARAYÜZÜ HAZIR")
 
         self.after(900, self.welcome_captain)
 
@@ -199,6 +261,165 @@ class MainWindow(ctk.CTk):
 
         # HUD entrance overlay peels away to reveal the live cabin
         self.after(100, self._show_online_overlay)
+
+    # =====================================================
+    # LAZY AI PROPERTIES — heavy modules loaded on first use
+    # =====================================================
+    @property
+    def brain(self):
+        if self._brain is None:
+            self._brain = _get_ai_instance("AudioBrain")
+        return self._brain
+
+    @property
+    def analyzer(self):
+        if self._analyzer is None:
+            self._analyzer = _get_ai_instance("AudioAnalyzer")
+        return self._analyzer
+
+    @property
+    def ai_ear(self):
+        if self._ai_ear is None:
+            self._ai_ear = _get_ai_instance("AIEar")
+        return self._ai_ear
+
+    @property
+    def club_intelligence(self):
+        if self._club_intelligence is None:
+            self._club_intelligence = _get_ai_instance("ClubIntelligence")
+        return self._club_intelligence
+
+    @property
+    def dj_heart(self):
+        if self._dj_heart is None:
+            self._dj_heart = _get_ai_instance("DJHeart")
+        return self._dj_heart
+
+    @property
+    def music_ai(self):
+        if self._music_ai is None:
+            self._music_ai = _get_ai_instance("MusicAI")
+        return self._music_ai
+
+    @property
+    def research(self):
+        if self._research is None:
+            self._research = _get_ai_instance("MusicResearchAssistant")
+        return self._research
+
+    @property
+    def performance_planner(self):
+        if self._performance_planner is None:
+            self._performance_planner = _get_ai_instance("PerformancePlanner")
+        return self._performance_planner
+
+    @property
+    def remix_lab(self):
+        if self._remix_lab is None:
+            self._remix_lab = _get_ai_instance("RemixLab")
+        return self._remix_lab
+
+    @property
+    def mix_master_doctor(self):
+        if self._mix_master_doctor is None:
+            self._mix_master_doctor = _get_ai_instance("MixMasterDoctor")
+        return self._mix_master_doctor
+
+    @property
+    def mix_master_engine(self):
+        if self._mix_master_engine is None:
+            self._mix_master_engine = _get_ai_instance("MixMasterEngine")
+        return self._mix_master_engine
+
+    @property
+    def show_director(self):
+        if self._show_director is None:
+            self._show_director = _get_ai_instance("ShowDirector")
+        return self._show_director
+
+    @property
+    def set_engine(self):
+        if self._set_engine is None:
+            self._set_engine = _get_ai_instance("SetEngine", self.brain)
+        return self._set_engine
+
+    @property
+    def voice_assistant(self):
+        if self._voice_assistant is None:
+            self._voice_assistant = _get_ai_instance("VoiceAssistant")
+        return self._voice_assistant
+
+    @property
+    def astra_assistant(self):
+        if self._astra_assistant is None:
+            self._astra_assistant = _get_ai_instance("AstraAssistant", runtime=self.voice_assistant.runtime)
+        return self._astra_assistant
+
+    @property
+    def camera_assistant(self):
+        if self._camera_assistant is None:
+            self._camera_assistant = _get_ai_instance("CameraAssistant")
+        return self._camera_assistant
+
+    @property
+    def playback(self):
+        if self._playback is None:
+            self._playback = _get_ai_instance("PlaybackEngine", callback=self.on_now_playing)
+        return self._playback
+
+    @property
+    def deck_engine(self):
+        if self._deck_engine is None:
+            self._deck_engine = _get_ai_instance("DeckEngine")
+        return self._deck_engine
+
+    @property
+    def feedback_learner(self):
+        if self._feedback_learner is None:
+            self._feedback_learner = _get_ai_instance("FeedbackLearner")
+        return self._feedback_learner
+
+    @property
+    def emergency_crate(self):
+        if self._emergency_crate is None:
+            self._emergency_crate = _get_ai_instance("EmergencyCrate")
+        return self._emergency_crate
+
+    @property
+    def dj_coach(self):
+        if self._dj_coach is None:
+            self._dj_coach = _get_ai_instance("DJCoach")
+        return self._dj_coach
+
+    @property
+    def set_recorder(self):
+        if self._set_recorder is None:
+            self._set_recorder = _get_ai_instance("SetRecorder")
+        return self._set_recorder
+
+    @property
+    def smart_playlist(self):
+        if self._smart_playlist is None:
+            self._smart_playlist = _get_ai_instance("SmartPlaylistGenerator")
+        return self._smart_playlist
+
+    @property
+    def similarity_engine(self):
+        if self._similarity_engine is None:
+            self._similarity_engine = _get_ai_instance("TrackSimilarityEngine")
+        return self._similarity_engine
+
+    @property
+    def dj_profile(self):
+        if self._dj_profile is None:
+            self._dj_profile = _get_ai_instance("DJProfile")
+        return self._dj_profile
+
+    @property
+    def genre_review(self):
+        if self._genre_review is None:
+            self._genre_review = _get_ai_instance("GenreReviewStudio")
+        return self._genre_review
 
     # =====================================================
     # ASTRA POWER DOWN — animated shutdown + farewell
@@ -345,8 +566,12 @@ class MainWindow(ctk.CTk):
             ov.place(relx=0, rely=0, relwidth=1, relheight=1)
             self._online_canvas = ov
             self._online_frame = 0
+            # NOTE: no update_idletasks() here — it runs inside an `after`
+            # callback dispatched from mainloop's update(), and force-draining
+            # the idle queue re-enters the layout pass in a tight loop
+            # (infinite event storm). The animation re-measures each frame and
+            # falls back to the window size below.
             try:
-                self.update_idletasks()
                 w = ov.winfo_width()
                 h = ov.winfo_height()
             except Exception:
@@ -419,6 +644,35 @@ class MainWindow(ctk.CTk):
 
     # =====================================================
     # PERSISTENT HUD — live telemetry frame (runs forever)
+    # =====================================================
+    def _hud_telemetry(self):
+        """Throttled psutil telemetry (CPU/MEM/NET) for the HUD strip.
+
+        _animate_hud runs every 50ms; psutil.net_io_counters() can be slow
+        under memory pressure. On this box a >50ms frame re-arms the after(50)
+        timer already due, so mainloop's initial update() (CustomTkinter
+        titlebar setup) never drains the queue and boot hangs. Measuring at
+        most once per second and caching keeps every frame cheap.
+        """
+        now = time.time()
+        cached = getattr(self, "_hud_tel_cache", None)
+        if cached is not None and now - cached[0] < 1.0:
+            return cached[1]
+        try:
+            import psutil
+            cpu = psutil.cpu_percent(interval=None)
+            mem = psutil.virtual_memory().percent
+            net_io = psutil.net_io_counters()
+            net_sent = net_io.bytes_sent / 1024 if net_io else 0
+            net_recv = net_io.bytes_recv / 1024 if net_io else 0
+            tel = f"CPU {cpu:4.1f}%  MEM {mem:4.1f}%"
+            net_str = f"↑{net_sent:.0f}KB ↓{net_recv:.0f}KB"
+        except Exception:
+            tel = "CPU ----  MEM ----"
+            net_str = t("hud.net")
+        self._hud_tel_cache = (now, (tel, net_str))
+        return tel, net_str
+
     # =====================================================
     def _animate_hud(self):
         """Persistent sci-fi HUD: corner brackets, scanline sweep, clock,
@@ -559,20 +813,9 @@ class MainWindow(ctk.CTk):
         cv.create_text(w // 2, 26, text=clock, fill="#8A8A9A",
                        font=("Consolas", 11, "bold"), tags="hud")
 
-        # telemetry strip top-right (CPU, MEM, NET, GPU)
-        try:
-            import psutil
-            cpu = psutil.cpu_percent(interval=None)
-            mem = psutil.virtual_memory().percent
-            # network
-            net_io = psutil.net_io_counters()
-            net_sent = net_io.bytes_sent / 1024 if net_io else 0
-            net_recv = net_io.bytes_recv / 1024 if net_io else 0
-            tel = f"CPU {cpu:4.1f}%  MEM {mem:4.1f}%"
-            net_str = f"↑{net_sent:.0f}KB ↓{net_recv:.0f}KB"
-        except Exception:
-            tel = "CPU ----  MEM ----"
-            net_str = t("hud.net")
+        # telemetry strip top-right (CPU, MEM, NET, GPU) — throttled to ~1/s
+        # so a single _animate_hud frame stays well under its 50ms re-arm.
+        tel, net_str = self._hud_telemetry()
 
         cv.create_text(w - 16, 14, text=tel, fill="#6A6A7A",
                        font=("Consolas", 8), anchor="e", tags="hud")
@@ -1000,7 +1243,7 @@ class MainWindow(ctk.CTk):
         # =====================================================
         # MINI PLAYER (persistent bottom bar)
         # =====================================================
-        self.mini_player = MiniPlayer(
+        self.mini_player = _load_ai_class("MiniPlayer")(
             self.main,
             on_play=self.toggle_playback,
             on_stop=self.stop_playback,
@@ -1009,7 +1252,7 @@ class MainWindow(ctk.CTk):
         self.mini_player.pack(fill="x", side="bottom")
 
         # QUICK STATS BAR
-        self.stats_bar = QuickStatsBar(self.main)
+        self.stats_bar = _load_ai_class("QuickStatsBar")(self.main)
         self.stats_bar.pack(fill="x", side="bottom")
 
         self.bind_global_shortcuts()
@@ -1349,7 +1592,46 @@ class MainWindow(ctk.CTk):
 
         self.show_duplicate_review(pending[0])
 
+    def _check_view_access(self, view):
+        """Check if current plan allows access to a view."""
+        # Map views to required plans
+        VIEW_REQUIREMENTS = {
+            "deck_studio": "PRO",
+            "dj_booth": "PRO",
+            "live_performance": "PRO",
+            "pioneer_link": "PRO",
+            "smart_set": "PRO",
+            "dj_profile": "PRO",
+            "remix_lab": "DJ_ARCHIVE",
+            "cloud_export": "DJ_ARCHIVE",
+            "neural_synth": "STUDIO",
+            "neural_bridge": "STUDIO",
+        }
+
+        required_plan = VIEW_REQUIREMENTS.get(view)
+        if required_plan is None:
+            return True, None  # DEMO and above
+
+        user_plan = self.plan.get("plan", "DEMO")
+        from app.ui.sidebar import PLAN_HIERARCHY
+        user_level = PLAN_HIERARCHY.get(user_plan, 0)
+        required_level = PLAN_HIERARCHY.get(required_plan, 0)
+
+        return user_level >= required_level, required_plan
+
     def set_view(self, view):
+
+        # Check access before switching
+        has_access, required_plan = self._check_view_access(view)
+        if not has_access:
+            # Show upgrade prompt via sidebar
+            if hasattr(self, "sidebar") and self.sidebar:
+                # Find the label_key for this view
+                from app.ui.sidebar import NAV_ITEMS
+                label_key = next((item[0] for item in NAV_ITEMS if item[1] == view), None)
+                if label_key:
+                    self.sidebar._show_upgrade_card(label_key, required_plan)
+            return
 
         if getattr(self, "current_view", None) != view:
             self._play_view_transition()
@@ -5653,9 +5935,43 @@ class MainWindow(ctk.CTk):
         AccountView(self).build(self.content)
 
     def create_checkout_intent(self, plan_name):
+        """Create a Stripe checkout session and open it in browser."""
 
-        path = self.commercial_api.write_checkout_intent(plan_name)
-        self.set_status(f"CHECKOUT INTENT CREATED: {path}")
+        email = self.account_email.get() or "user@dj-ai-os.local"
+        result = self.commercial_api.create_checkout(plan_name, email)
+
+        if isinstance(result, dict) and result.get("ok") and result.get("checkout"):
+            url = result["checkout"].get("checkout_url")
+            if url:
+                import webbrowser
+
+                webbrowser.open(url)
+                self.set_status(f"CHECKOUT açıldı: {plan_name} — {url}")
+            else:
+                self.set_status(f"CHECKOUT oluşturuldu ancak URL boş: {result}")
+        else:
+            reason = result.get("reason", "UNKNOWN") if isinstance(result, dict) else "ERROR"
+            self.set_status(f"CHECKOUT başarısız: {reason}")
+
+    def open_customer_portal(self):
+        """Open Stripe Customer Portal for self-serve billing management."""
+
+        plan = self.license.get_plan()
+        stripe_customer_id = plan.get("stripe_customer_id")
+
+        if not stripe_customer_id:
+            self.set_status("Stripe müşteri ID'si bulunamadı. Önce abonelik başlatın.")
+            return
+
+        result = self.commercial_api.get_customer_portal_url(stripe_customer_id)
+        if isinstance(result, dict) and result.get("ok") and result.get("url"):
+            import webbrowser
+
+            webbrowser.open(result["url"])
+            self.set_status(f"Müşteri portalı açıldı: {result['url']}")
+        else:
+            reason = result.get("reason", "UNKNOWN") if isinstance(result, dict) else "ERROR"
+            self.set_status(f"Portal açılamadı: {reason}")
 
     def activate_license_from_ui(self):
 
@@ -5670,7 +5986,102 @@ class MainWindow(ctk.CTk):
             self.set_view("account")
             return
 
-        self.set_status(f"LICENSE ACTIVATION FAILED: {result.get('reason')}")
+        reason = result.get("reason", "UNKNOWN")
+        messages = {
+            "INVALID_LICENSE_KEY": "Lisans anahtarı geçersiz (prefix/süre kontrolü başarısız).",
+            "INVALID_SIGNATURE": "Lisans imzası geçersiz — anahtar kurcalanmış olabilir.",
+            "NO_SIGNING_KEY": "Bu makinede imzalama yok; çevrimiçi aktivasyon gerekli.",
+            "SERVER_UNREACHABLE_NO_LOCAL_KEY": (
+                "Sunucuya ulaşılamadı ve bu makinede yerel imzalama yok. "
+                "Çevrimdışı imzalı lisans için vendor ile iletişime geçin."
+            ),
+        }
+        self.set_status(
+            f"LISANS AKTIVASYONU BASARISIZ: {messages.get(reason, reason)}"
+        )
+
+    # -------------------------
+    # UPDATE ENGINE (lisanslı kullanıcılar)
+    # -------------------------
+
+    def _get_update_engine(self):
+        if getattr(self, "_update_engine", None) is None:
+            from app.cloud.update_engine import UpdateEngine
+            self._update_engine = UpdateEngine()
+        return self._update_engine
+
+    def check_for_updates_ui(self):
+        """Arka plan thread'de manifest kontrolü; sonuç UI'a marshal edilir."""
+
+        def worker():
+            plan = self.license.get_plan()
+            try:
+                engine = self._get_update_engine()
+                # Use the commercial API base URL so the client fetches the
+                # signed manifest from the production server (fixes P0-2:
+                # update CDN placeholder was never contacted).
+                api_base = getattr(self.commercial_api, "base_url", "") or None
+                result = engine.check_for_updates(
+                    plan,
+                    base_url=api_base,
+                    offline_dir=os.environ.get("DJ_AI_OS_UPDATE_DIR") or None,
+                )
+            except Exception as err:
+                result = {"available": False, "reason": "error", "message": str(err)}
+            self._update_info = result
+            self.after(0, lambda: self._render_update_result(result))
+
+        threading.Thread(target=worker, daemon=True).start()
+        self.set_status("Güncelleme kontrol ediliyor…")
+
+    def apply_update_ui(self):
+        """Onaylanan güncellemeyi arka planda uygula."""
+        info = getattr(self, "_update_info", None)
+        manifest = (info or {}).get("manifest")
+        if not manifest:
+            self.set_status("Güncelleme bilgisi yok — önce GÜNCELLEME KONTROL yapın.")
+            return
+
+        def worker():
+            try:
+                result = self._get_update_engine().apply_update(
+                    manifest, user_approved=True
+                )
+            except Exception as err:
+                result = {"ok": False, "reason": str(err)}
+            self.after(0, lambda: self._render_apply_result(result))
+
+        threading.Thread(target=worker, daemon=True).start()
+        self.set_status("Güncelleme uygulanıyor…")
+
+    def _render_update_result(self, result):
+        self._update_info = result
+        if result.get("available"):
+            msg = (
+                f"UPDATE v{result['latest']} mevcut | kritik: "
+                f"{'EVET' if result.get('critical') else 'HAYIR'} | "
+                f"{result.get('modules_to_update', 0)} modül"
+            )
+        else:
+            msg = f"UPDATE: {result.get('message') or result.get('reason')}"
+        self.set_status(msg)
+        if getattr(self, "update_status_label", None) and self.update_status_label.winfo_exists():
+            self.update_status_label.configure(text=msg)
+        if getattr(self, "update_apply_button", None) and self.update_apply_button.winfo_exists():
+            state = "normal" if result.get("available") else "disabled"
+            self.update_apply_button.configure(state=state)
+
+    def _render_apply_result(self, result):
+        if result.get("ok"):
+            restart_note = (
+                " — Uygulamayı yeniden başlatın." if result.get("needs_restart") else ""
+            )
+            msg = result.get("message", "Güncelleme tamamlandı") + restart_note
+        else:
+            msg = f"GÜNCELLEME HATASI: {result.get('reason')}"
+        self.set_status(msg)
+        if getattr(self, "update_status_label", None) and self.update_status_label.winfo_exists():
+            self.update_status_label.configure(text=msg)
 
     def build_settings_view(self):
 
@@ -6160,7 +6571,7 @@ class MainWindow(ctk.CTk):
 
             self.after(
                 0,
-                lambda: show_toast(
+                lambda: _load_ai_class("show_toast")(
                     f"Tarama tamamlandi: {analyzed} yeni, {skipped} mevcut",
                     "success"
                 )

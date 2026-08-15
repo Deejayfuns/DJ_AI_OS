@@ -25,6 +25,12 @@ import tkinter as tk
 from app.core import system_probe as probe
 from app.core.i18n import t, get_language
 
+# Fix CustomTkinter's CTkScrollbar reentrancy storm before ANY widget is
+# built — a nested _draw triggered by its own update_idletasks would
+# otherwise loop forever during boot.
+from app.core.ctk_patch import apply_ctk_patch
+apply_ctk_patch()
+
 # ---- palette (matches theme.py) ----
 BG = "#05050A"
 GRID = "#0D0D1A"
@@ -186,6 +192,19 @@ class BootSplash(tk.Tk):
         self._core_queue.put(lines)
 
     def _poll_core(self):
+        # Watchdog: if the heavy core import hangs, never let the boot spin
+        # forever — force-complete the step and let the handoff build the
+        # cabin directly (it re-imports MainWindow anyway).
+        if self._core_waiting and self._core_start is not None:
+            if time.time() - self._core_start > 75:
+                self._core_waiting = False
+                self._weight_done += 18
+                self._update_progress()
+                self._post_lines([
+                    ("⚠", "çekirdek yüklenmesi uzun sürdü — ana kabin doğrudan kuruluyor", "amber"),
+                ])
+                self.after(250, self._next_step)
+                return
         try:
             lines = self._core_queue.get_nowait()
         except queue.Empty:
@@ -640,13 +659,35 @@ class BootSplash(tk.Tk):
 # launch helper (used by main.py)
 # ============================================================
 
+def _cabin_progress(splash, label):
+    """Live 'KABİN KURULUYOR' checkpoint: stream a console line onto the
+    splash canvas while MainWindow builds on the main thread.
+
+    IMPORTANT: this runs INSIDE MainWindow.__init__ (via the on_boot
+    callback). It must NOT call splash.update() — pumping the event loop
+    mid-construction re-dispatches pending widget events (scrollbar set /
+    canvas scrollregion changes) and can start an infinite update_idletasks
+    storm. Drawing directly on the canvas is safe and keeps the console
+    visibly advancing without touching the event queue.
+    """
+    try:
+        splash._print((None, label, "amber"))
+        splash._autoscroll()
+        splash._draw_console()
+    except Exception:
+        pass
+
+
 def run_boot(on_ready=None, chime=True):
     """Blocking boot: returns the constructed MainWindow (or None)."""
     holder = []
 
     def _handoff(splash):
         from app.ui.main_window import MainWindow
-        app = MainWindow()
+        splash._running = ("KABİN KURULUYOR", AMBER)
+        splash._print(("✦", "KABİN KURULUYOR — AI motorları, veritabanı, UI…", "blue"))
+        splash.update()
+        app = MainWindow(on_boot=lambda lbl: _cabin_progress(splash, lbl))
         # keep the old _default_root dance so later widget creation works
         try:
             import tkinter as _tk
@@ -654,10 +695,14 @@ def run_boot(on_ready=None, chime=True):
         except Exception:
             pass
         # cinematic dissolve: the main window materializes transparent and
-        # fades in while the boot window exits
+        # fades in while the boot window exits. NOTE: do NOT call
+        # app.update_idletasks() here — it force-processes every pending
+        # layout idle-task of the freshly built window in a tight loop, and
+        # each CTkScrollbar._draw -> update_idletasks reenters the same loop
+        # (infinite event storm). The fade starts from alpha 0.0 and the
+        # window renders normally on the first mainloop tick.
         try:
             app.attributes("-alpha", 0.0)
-            app.update_idletasks()
         except Exception:
             pass
         holder.append(app)
