@@ -4,14 +4,19 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-from app.server.license_service import LicenseService
+from app.license import signature as sig
 
 
 class CommercialAPIClient:
 
-    def __init__(self, base_url="https://api.dj-ai-os.example"):
+    def __init__(self, base_url=None):
 
-        self.base_url = base_url.rstrip("/")
+        # Gerçek API adresini env ile verilebilir yap (örn. DJ_AI_OS_API_URL).
+        self.base_url = (
+            base_url
+            or os.environ.get("DJ_AI_OS_API_URL", "")
+            or "https://api.dj-ai-os.example"
+        ).rstrip("/")
 
     def account_status(self, plan, entitlements):
 
@@ -38,13 +43,17 @@ class CommercialAPIClient:
 
         return {
             "health": f"{self.base_url}/health",
-            "activate": f"{self.base_url}/activate",
-            "entitlements": f"{self.base_url}/entitlements",
-            "checkout": f"{self.base_url}/checkout",
-            "cloud_packs": f"{self.base_url}/cloud/packs",
+            "activate": f"{self.base_url}/api/activate",
+            "entitlements": f"{self.base_url}/api/entitlements",
+            "checkout": f"{self.base_url}/api/checkout",
+            "customer_portal": f"{self.base_url}/api/customer-portal",
+            "webhooks_stripe": f"{self.base_url}/api/webhooks/stripe",
+            "cloud_packs": f"{self.base_url}/api/cloud/packs",
             "cloud_download": (
-                f"{self.base_url}/cloud/packs/{{pack_id}}/download"
+                f"{self.base_url}/api/cloud/packs/{{pack_id}}/download"
             ),
+            "update_manifest": f"{self.base_url}/api/update/manifest",
+            "admin": f"{self.base_url}/admin/",
         }
 
     def activation_payload(self, email, license_key, machine_id):
@@ -56,20 +65,58 @@ class CommercialAPIClient:
             "client": "DJ AI OS Desktop",
         }
 
+    def create_checkout(self, plan_name, email, success_url="", cancel_url=""):
+
+        payload = {
+            "plan": plan_name,
+            "email": email,
+            "success_url": success_url,
+            "cancel_url": cancel_url,
+        }
+        return self.post_json(self.endpoint_contract()["checkout"], payload)
+
+    def get_customer_portal_url(self, stripe_customer_id, return_url=""):
+
+        payload = {
+            "stripe_customer_id": stripe_customer_id,
+            "return_url": return_url,
+        }
+        return self.post_json(self.endpoint_contract()["customer_portal"], payload)
+
     def activate_license(self, email, license_key, machine_id):
 
         payload = self.activation_payload(email, license_key, machine_id)
 
         try:
-            return self.post_json(
+            result = self.post_json(
                 self.endpoint_contract()["activate"],
                 payload
             )
+            # Çevrimiçi sunucu imzalı lisans döndürdüyse kullan.
+            if isinstance(result, dict) and result.get("ok") and result.get("license"):
+                return result
         except Exception:
-            service = LicenseService()
-            result = service.activate(email, license_key, machine_id)
-            result["mode"] = "LOCAL_DEV_ACTIVATION"
-            return result
+            pass
+
+        # Sunucu yok / ulaşılamıyor. Yerel imzalama YALNIZCA vendor makinesinde
+        # çalışır (private key gerekir). Paketlenmiş client'ta key yoktur —
+        # sahte lisans üretilemez, kullanıcıya temiz bir offline durumu döner.
+        # Not: Bu kod production build'de asla çalışmaz çünkü vendor private key
+        # paketlenmez (gitignored). Sadece geliştirme ortamında sig.has_signing_key()
+        # True dönebiliyordu, ancak LicenseService artık session gerektirdiği için
+        # lokal imzalama path'i production'da kullanılamaz ve güvenli bir şekilde
+        # atlanmalıdır.
+        return {
+            "ok": False,
+            "reason": "SERVER_UNREACHABLE_NO_LOCAL_KEY",
+            "license": None,
+            "mode": "OFFLINE",
+            "message": (
+                "Sunucuya ulaşılamadı ve bu makinede yerel imzalama yok. "
+                "Lütfen çevrimiçi aktivasyon kullanın veya vendor'dan "
+                "çevrimdışı imzalı lisans edinin."
+            ),
+        }
 
     def post_json(self, url, payload, timeout=8):
 
