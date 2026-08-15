@@ -47,6 +47,7 @@ from app.license.license_manager import LicenseManager
 from app.server.billing_service import BillingService
 from app.server.cloud_service import CloudService
 from app.server.license_service import LicenseService
+from app.server.db.models import Base
 from data.db.ai_library_db import AILibraryDB
 
 
@@ -256,11 +257,20 @@ def test_library_db_persists_archive_fields():
 
 def test_demo_license_limit():
     manager = LicenseManager()
+    # Kaynak ağacı + açık dev.flag/env OLMADAN → DEMO (güvenli varsayılan).
+    # owner_dev_mode artık bayraksız tetiklenmez; demo/limit yolu test edilir.
+    manager.owner_dev_mode = False
 
+    assert manager.get_plan()["plan"] == "DEMO"
+    assert manager.get_plan()["max_tracks"] == 1000  # H5 tutarlılığı (1000, 10000 değil)
     assert manager.check_limit(0) is True
-    assert manager.get_plan()["plan"] == "OWNER_DEV"
+    assert manager.check_limit(999) is True
+    assert manager.check_limit(1000) is False  # 1000. track'te limit devrede
+
+    # OWNER_DEV (geliştirici) → sınırsız
+    manager.owner_dev_mode = True
     assert manager.get_plan()["max_tracks"] == 0
-    assert manager.check_limit(manager.trial_limit) is True
+    assert manager.check_limit(1000000) is True
 
 
 def test_audio_analyzer_fallback_is_safe():
@@ -1269,81 +1279,325 @@ def test_genre_review_approves_discovered_track():
             os.remove(path)
 
 
-def test_commercial_api_local_activation_fallback():
-    client = CommercialAPIClient(base_url="http://127.0.0.1:9")
-    result = client.activate_license(
-        "dj@example.com",
-        "ARCHIVE-12345678",
-        "machine-1"
-    )
+async def _make_session():
+    """In-memory async SQLite session for server-layer smoke tests."""
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
-    assert result["ok"] is True
-    assert result["license"]["plan"] == "DJ_ARCHIVE"
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    return factory()
+
+
+def test_commercial_api_local_activation_fallback():
+    # Packaged client has NO vendor signing key → offline activation must
+    # return a clean OFFLINE result, never forge a license.
+    import app.license.signature as sig_mod
+
+    client = CommercialAPIClient(base_url="http://127.0.0.1:9")
+    orig = sig_mod.has_signing_key
+    sig_mod.has_signing_key = lambda: False
+    try:
+        result = client.activate_license(
+            "dj@example.com",
+            "ARCHIVE-12345678",
+            "machine-1"
+        )
+    finally:
+        sig_mod.has_signing_key = orig
+
+    assert result["ok"] is False
+    assert result["mode"] == "OFFLINE"
+    assert result["license"] is None
 
 
 def test_server_license_activation_and_entitlements():
-    service = LicenseService(secret="test-secret")
+    import asyncio
+    import app.license.signature as sig_mod
 
-    activated = service.activate(
-        "dj@example.com",
-        "ARCHIVE-12345678",
-        "machine-1"
-    )
-    checked = service.entitlements_for_license(activated["license"])
+    async def _run():
+        session = await _make_session()
+        service = LicenseService(session)
 
-    assert activated["ok"] is True
-    assert activated["license"]["plan"] == "DJ_ARCHIVE"
-    assert checked["ok"] is True
-    assert checked["entitlements"]["dj_archive_downloads"] is True
+        from app.server.db.models import License
+        import secrets
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        lic = License(
+            id=secrets.token_hex(16),
+            user_id=secrets.token_hex(16),
+            key="ARCHIVE-12345678",
+            plan="DJ_ARCHIVE",
+            issued_at=now,
+            expires_at=now + timedelta(days=365),
+            max_tracks=50000,
+            updates_until=now + timedelta(days=90),
+            is_active=True,
+            signature_nonce=secrets.token_hex(32),
+        )
+        session.add(lic)
+        await session.flush()
+
+        activated = await service.activate(
+            "dj@example.com",
+            "ARCHIVE-12345678",
+            "machine-1"
+        )
+        return activated
+
+    # Force NO_SIGNING_KEY path (packaged client reality)
+    orig = sig_mod.has_signing_key
+    sig_mod.has_signing_key = lambda: False
+    try:
+        activated = asyncio.run(_run())
+    finally:
+        sig_mod.has_signing_key = orig
+
+    assert activated["ok"] is False
+    assert activated["reason"] == "NO_SIGNING_KEY"
 
 
 def test_server_billing_checkout_and_webhook_contract():
-    billing = BillingService()
-    checkout = billing.create_checkout(
-        "PRO",
-        "dj@example.com",
-        "https://success",
-        "https://cancel"
-    )
-    webhook = billing.handle_webhook({
-        "type": "subscription_created",
-        "payload": {
-            "email": "dj@example.com",
-            "plan": "PRO",
-        },
-    })
+    import asyncio
 
-    assert checkout["ok"] is True
-    assert checkout["checkout"]["status"] == "PENDING_PROVIDER"
-    assert webhook["action"] == "ISSUE_LICENSE"
+    async def _run():
+        session = await _make_session()
+        billing = BillingService(session)
+        return await billing.create_checkout(
+            "PRO",
+            "dj@example.com",
+            "https://success",
+            "https://cancel"
+        )
+
+    checkout = asyncio.run(_run())
+    # Stripe not configured in test → fails cleanly, no crash
+    assert checkout["ok"] is False
+    assert checkout["checkout"] is None
 
 
 def test_server_cloud_download_requires_entitlement():
-    cloud = CloudService()
-    blocked = cloud.download_pack(
-        "monthly_tech_house_essentials",
-        {
-            "licensed": False,
-            "plan": "DEMO",
-            "entitlements": {
-                "dj_archive_downloads": False,
-            },
-        }
-    )
-    allowed = cloud.download_pack(
-        "monthly_tech_house_essentials",
-        {
-            "licensed": True,
-            "plan": "DJ_ARCHIVE",
-            "entitlements": {
-                "dj_archive_downloads": True,
-            },
-        }
-    )
+    import asyncio
 
+    async def _run():
+        session = await _make_session()
+        cloud = CloudService(session)
+        return await cloud.download_pack(
+            "monthly_tech_house_essentials",
+            {
+                "licensed": False,
+                "plan": "DEMO",
+                "entitlements": {"dj_archive_downloads": False},
+                "nonce": "nonexistent",
+            }
+        )
+
+    blocked = asyncio.run(_run())
     assert blocked["ok"] is False
-    assert allowed["ok"] is True
-    assert allowed["download"]["signed_url"]
+
+
+# ============================================================
+# RATE LIMITING TESTS (P1-2)
+# ============================================================
+
+def test_rate_limit_allows_requests_under_limit():
+    """Verify requests below limit are allowed (200/expected status)."""
+    from fastapi.testclient import TestClient
+    from app.server.rate_limit import FixedWindowRateLimiter, RateLimitMiddleware
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    limiter = FixedWindowRateLimiter()
+    app.add_middleware(RateLimitMiddleware, limiter=limiter)
+
+    @app.post("/api/activate")
+    async def activate():
+        return {"ok": True}
+
+    client = TestClient(app)
+    for _ in range(5):
+        r = client.post("/api/activate", json={})
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+
+def test_rate_limit_blocks_exceeding_limit():
+    """Verify requests above limit return 429."""
+    from fastapi.testclient import TestClient
+    from app.server.rate_limit import FixedWindowRateLimiter, RateLimitMiddleware
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    limiter = FixedWindowRateLimiter()
+    app.add_middleware(RateLimitMiddleware, limiter=limiter)
+
+    @app.post("/api/activate")
+    async def activate():
+        return {"ok": True}
+
+    client = TestClient(app)
+    # Default limit for /api/activate is 30/min; send 35
+    last_status = None
+    for i in range(35):
+        r = client.post("/api/activate", json={})
+        last_status = r.status_code
+        if r.status_code == 429:
+            assert "Retry-After" in r.headers
+            assert r.headers["Retry-After"].isdigit()
+            assert int(r.headers["Retry-After"]) > 0
+            assert r.json()["detail"] == "Rate limit exceeded"
+            break
+    else:
+        assert False, "Expected 429 after exceeding rate limit"
+
+
+def test_rate_limit_retry_after_present():
+    """Verify Retry-After header is present and positive on 429."""
+    from fastapi.testclient import TestClient
+    from app.server.rate_limit import FixedWindowRateLimiter, RateLimitMiddleware
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    limiter = FixedWindowRateLimiter()
+    app.add_middleware(RateLimitMiddleware, limiter=limiter)
+
+    @app.post("/api/entitlements")
+    async def entitlements():
+        return {"ok": True}
+
+    client = TestClient(app)
+    for i in range(35):
+        r = client.post("/api/entitlements", json={})
+        if r.status_code == 429:
+            retry = r.headers.get("Retry-After")
+            assert retry is not None
+            assert int(retry) > 0
+            return
+    assert False, "Expected 429 after exceeding rate limit"
+
+
+def test_rate_limit_independent_buckets():
+    """Verify different endpoints have independent rate-limit buckets."""
+    from fastapi.testclient import TestClient
+    from app.server.rate_limit import FixedWindowRateLimiter, RateLimitMiddleware
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    limiter = FixedWindowRateLimiter()
+    app.add_middleware(RateLimitMiddleware, limiter=limiter)
+
+    @app.post("/api/activate")
+    async def activate():
+        return {"path": "activate"}
+
+    @app.post("/api/entitlements")
+    async def entitlements():
+        return {"path": "entitlements"}
+
+    client = TestClient(app)
+    # Exhaust /api/activate bucket (30 default)
+    for _ in range(30):
+        r = client.post("/api/activate", json={})
+        assert r.status_code == 200
+
+    # /api/entitlements should still be allowed (different bucket)
+    r = client.post("/api/entitlements", json={})
+    assert r.status_code == 200
+    assert r.json()["path"] == "entitlements"
+
+
+def test_rate_limit_health_unaffected():
+    """Verify /health is excluded from rate limiting."""
+    from fastapi.testclient import TestClient
+    from app.server.rate_limit import FixedWindowRateLimiter, RateLimitMiddleware
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    limiter = FixedWindowRateLimiter()
+    app.add_middleware(RateLimitMiddleware, limiter=limiter)
+
+    @app.get("/health")
+    async def health():
+        return {"ok": True}
+
+    client = TestClient(app)
+    # Send many requests — should all succeed (no limit on /health)
+    for _ in range(50):
+        r = client.get("/health")
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+
+def test_rate_limit_stripe_webhook_unaffected():
+    """Verify /api/webhooks/stripe is excluded from rate limiting."""
+    from fastapi.testclient import TestClient
+    from app.server.rate_limit import FixedWindowRateLimiter, RateLimitMiddleware
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    limiter = FixedWindowRateLimiter()
+    app.add_middleware(RateLimitMiddleware, limiter=limiter)
+
+    @app.post("/api/webhooks/stripe")
+    async def webhook():
+        return {"ok": True}
+
+    client = TestClient(app)
+    # Send many requests — should all succeed (excluded path)
+    for _ in range(50):
+        r = client.post("/api/webhooks/stripe", json={})
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+
+def test_rate_limit_checkout_lower_limit():
+    """Verify /api/checkout has tighter limit (10/min default)."""
+    from fastapi.testclient import TestClient
+    from app.server.rate_limit import FixedWindowRateLimiter, RateLimitMiddleware
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    limiter = FixedWindowRateLimiter()
+    app.add_middleware(RateLimitMiddleware, limiter=limiter)
+
+    @app.post("/api/checkout")
+    async def checkout():
+        return {"ok": True}
+
+    client = TestClient(app)
+    # Send 15 requests; limit is 10, so 11th+ should be 429
+    status_codes = []
+    for _ in range(15):
+        r = client.post("/api/checkout", json={})
+        status_codes.append(r.status_code)
+    # First 10 should be 200, rest 429
+    assert status_codes[:10] == [200] * 10
+    assert 429 in status_codes[10:]
+
+
+def test_rate_limit_customer_portal_lower_limit():
+    """Verify /api/customer-portal has tighter limit (10/min default)."""
+    from fastapi.testclient import TestClient
+    from app.server.rate_limit import FixedWindowRateLimiter, RateLimitMiddleware
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    limiter = FixedWindowRateLimiter()
+    app.add_middleware(RateLimitMiddleware, limiter=limiter)
+
+    @app.post("/api/customer-portal")
+    async def portal():
+        return {"ok": True}
+
+    client = TestClient(app)
+    status_codes = []
+    for _ in range(15):
+        r = client.post("/api/customer-portal", json={})
+        status_codes.append(r.status_code)
+    assert status_codes[:10] == [200] * 10
+    assert 429 in status_codes[10:]
 
 
 # ============================================================

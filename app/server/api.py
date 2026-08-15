@@ -1,26 +1,34 @@
+"""
+DJ AI OS — Commercial API
+
+FastAPI application with license activation, entitlements, Stripe checkout,
+webhooks, and admin API router.
+
+Main entry: app.server.run:app
+"""
+
+import os
+from typing import Optional
+
+import uvicorn
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from app.cloud.beatport_client import BeatportClient
+from app.server.admin_api import router as admin_router, auth_router as admin_auth_router
 from app.server.billing_service import BillingService
 from app.server.cloud_service import CloudService
+from app.server.deps import get_admin_token, get_session
 from app.server.license_service import LicenseService
-from app.cloud.beatport_client import BeatportClient
+from app.cloud.dj_archive_cloud import DJArchiveCloud
 from app.ai.graph_memory import GraphMemory
-import time
+from app.server.rate_limit import RateLimitMiddleware
 
 
-license_service = LicenseService()
-billing_service = BillingService()
-cloud_service = CloudService()
-beatport = BeatportClient()
-graph = GraphMemory()
-cached_model = None
-cached_model_path = None
-
-try:
-    from fastapi import FastAPI
-    from pydantic import BaseModel
-except Exception:
-    FastAPI = None
-    BaseModel = object
-
+# ─── Request Models ───
 
 class ActivateRequest(BaseModel):
     email: str
@@ -47,214 +55,337 @@ class DownloadRequest(BaseModel):
     plan: dict
 
 
-def create_app():
+class CustomerPortalRequest(BaseModel):
+    stripe_customer_id: str
+    return_url: str = ""
 
-    if FastAPI is None:
-        raise RuntimeError(
-            "FastAPI is not installed. Install fastapi and uvicorn to run API."
-        )
+
+# ─── App ───
+
+def create_app() -> FastAPI:
+    """Create and configure FastAPI application."""
 
     app = FastAPI(
         title="DJ AI OS Commercial API",
         version="0.1.0",
+        description="License activation, billing, cloud, and admin API for DJ AI OS.",
     )
 
+    # Rate limiting (abuse protection) — placed before CORS
+    app.add_middleware(RateLimitMiddleware)
+
+    # CORS (admin SPA dev + client)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Include admin routers
+    app.include_router(admin_router)        # /login, /config (token-verified)
+    app.include_router(admin_auth_router)   # data/mutation (admin-only)
+
+    # ─── Health ───
+
     @app.get("/health")
-    def health():
-        return {
-            "ok": True,
-            "service": "dj-ai-os-api",
+    async def health():
+        return {"ok": True, "service": "dj-ai-os-api", "version": "0.1.0"}
+
+    # ─── License Activation ───
+
+    @app.post("/api/activate")
+    async def activate(req: ActivateRequest, request: Request, session=Depends(get_session)):
+        service = LicenseService(session)
+        client_ip = request.client.host if request.client else None
+        result = await service.activate(
+            email=req.email,
+            license_key=req.license_key,
+            machine_id=req.machine_id,
+            ip_address=client_ip,
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason"))
+        return result
+
+    # ─── Entitlements ───
+
+    @app.post("/api/entitlements")
+    async def entitlements(req: EntitlementsRequest, session=Depends(get_session)):
+        service = LicenseService(session)
+        result = await service.entitlements_for_license_data(req.license)
+        return result
+
+    # ─── Checkout ───
+
+    @app.post("/api/checkout")
+    async def checkout(req: CheckoutRequest, session=Depends(get_session)):
+        service = BillingService(session)
+        result = await service.create_checkout(
+            plan=req.plan, email=req.email, success_url=req.success_url, cancel_url=req.cancel_url
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason"))
+        return result
+
+    # ─── Customer Portal ───
+
+    @app.post("/api/customer-portal")
+    async def customer_portal(req: CustomerPortalRequest, session=Depends(get_session)):
+        service = BillingService(session)
+        result = await service.get_customer_portal_url(req.stripe_customer_id, req.return_url)
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason"))
+        return result
+
+    # ─── Webhooks ───
+
+    @app.post("/api/webhooks/stripe")
+    async def webhook_stripe(request: Request, session=Depends(get_session)):
+        raw_body = await request.body()
+        sig_header = request.headers.get("Stripe-Signature", "")
+        service = BillingService(session)
+        result = await service.handle_webhook(raw_body, sig_header)
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason"))
+        return result
+
+    # ─── Cloud Packs ───
+
+    @app.post("/api/cloud/packs")
+    async def cloud_packs(req: CloudRequest, session=Depends(get_session)):
+        service = CloudService(session)
+        return await service.list_packs(req.plan)
+
+    # ─── Update Manifest ───
+
+    @app.get("/api/update/manifest")
+    async def update_manifest(
+        version: str = None,
+        channel: str = "stable",
+        platform: str = "win32",
+    ):
+        """
+        Return signed update manifest for the update engine.
+
+        Client contract (UpdateEngine.check_for_updates):
+        {
+            "version": "0.2.0",
+            "min_client_version": "0.1.0",
+            "released_at": "2026-08-12T00:00:00Z",
+            "critical": false,
+            "changelog": "bug fixes",
+            "download_url": "https://cdn.example.com/updates/v0.2.0",
+            "modules": [
+                {"name": "app/config/version.py", "version": "0.2.0", "sha256": "...", "size": 123, "hot_reload": false}
+            ],
+            "signature": "<ed25519_hex>"
         }
 
-    @app.post("/activate")
-    def activate(request: ActivateRequest):
-        return license_service.activate(
-            request.email,
-            request.license_key,
-            request.machine_id
+        The manifest file is expected at:
+        - DJ_AI_OS_UPDATE_MANIFEST env var (file path), OR
+        - ./update_manifest.json (repo root, for dev), OR
+        - /app/update_manifest.json (container)
+        """
+        import json
+        import os
+        from pathlib import Path
+
+        # Resolve manifest path
+        manifest_path = os.environ.get("DJ_AI_OS_UPDATE_MANIFEST", "").strip()
+        if not manifest_path:
+            # Try common locations
+            for candidate in [
+                Path(__file__).resolve().parent.parent.parent / "update_manifest.json",
+                Path("/app/update_manifest.json"),
+            ]:
+                if candidate.exists():
+                    manifest_path = str(candidate)
+                    break
+
+        if not manifest_path or not Path(manifest_path).exists():
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "ok": False,
+                    "reason": "MANIFEST_NOT_FOUND",
+                    "message": "Update manifest not configured on server",
+                }
+            )
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception as e:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "ok": False,
+                    "reason": "MANIFEST_READ_ERROR",
+                    "message": f"Failed to read manifest: {e}",
+                }
+            )
+
+        # Basic schema validation (fail-closed)
+        required_fields = ["version", "modules", "download_url", "signature"]
+        for field in required_fields:
+            if field not in manifest:
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "ok": False,
+                        "reason": "MANIFEST_INVALID",
+                        "message": f"Manifest missing required field: {field}",
+                    }
+                )
+
+        # Optional: filter modules by version/channel/platform if manifest supports it
+        # For V1.0, return the full manifest as-is
+        return manifest
+
+    # ─── Update Module Artifact ───
+
+    @app.get("/api/update/modules/{module_path:path}")
+    async def update_module_artifact(module_path: str):
+        """
+        Serve a signed module artifact for the update engine.
+
+        The update client resolves a module download URL as
+        ``<download_url>/modules/<module_path>`` and fetches it here.
+        ``download_url`` in the manifest is the server's base URL
+        (e.g. ``https://api.dj-ai-os.example/api/update``), so the effective
+        path is ``/api/update/modules/<module_path>``.
+
+        Artifacts live in the directory configured by
+        ``DJ_AI_OS_UPDATE_ARTIFACTS`` (default: ``dist/update_artifacts``),
+        laid out by module name (e.g. ``app/config/version.py``).
+
+        Path traversal is blocked: the resolved path MUST stay inside the
+        artifacts root.
+        """
+        import os
+        from pathlib import Path
+        from fastapi import HTTPException
+        from fastapi.responses import FileResponse
+
+        artifacts_root = os.environ.get("DJ_AI_OS_UPDATE_ARTIFACTS", "").strip()
+        if not artifacts_root:
+            artifacts_root = os.path.join(
+                Path(__file__).resolve().parent.parent.parent, "dist", "update_artifacts"
+            )
+
+        root = Path(artifacts_root).resolve()
+        target = (root / module_path).resolve()
+
+        # Path-traversal guard (fail-closed)
+        try:
+            target.relative_to(root)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "reason": "INVALID_MODULE_PATH"},
+            )
+
+        if not target.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail={"ok": False, "reason": "MODULE_NOT_FOUND"},
+            )
+
+        return FileResponse(
+            str(target),
+            media_type="application/octet-stream",
+            filename=os.path.basename(target),
         )
 
-    @app.post("/entitlements")
-    def entitlements(request: EntitlementsRequest):
-        return license_service.entitlements_for_license(request.license)
+    # ─── Cloud Download ───
 
-    @app.post("/checkout")
-    def checkout(request: CheckoutRequest):
-        return billing_service.create_checkout(
-            request.plan,
-            request.email,
-            request.success_url,
-            request.cancel_url
-        )
+    @app.post("/api/cloud/packs/{pack_id}/download")
+    async def cloud_pack_download(pack_id: str, req: DownloadRequest, session=Depends(get_session)):
+        service = CloudService(session)
+        return await service.download_pack(pack_id, req.plan)
 
-    @app.post("/cloud/packs")
-    def cloud_packs(request: CloudRequest):
-        return cloud_service.list_packs(request.plan)
+    # ─── Charts (Beatport) ───
 
-    @app.post("/cloud/packs/{pack_id}/download")
-    def cloud_pack_download(pack_id: str, request: DownloadRequest):
-        return cloud_service.download_pack(pack_id, request.plan)
+    beatport = BeatportClient()
+    graph = GraphMemory()
 
     @app.get("/charts/top100")
-    def top100():
+    async def top100():
         data = beatport.top_100()
         return {"ok": True, "count": len(data) if isinstance(data, list) else 0, "items": data}
 
-    class RecommendationRequest(BaseModel):
-        dj_id: str | None = None
-        genre: str | None = None
+    # ─── Recommendations ───
 
-    @app.post("/recommendations")
-    def recommendations(request: RecommendationRequest):
+    class RecommendationRequest(BaseModel):
+        dj_id: Optional[str] = None
+        genre: Optional[str] = None
+
+    @app.post("/charts/recommend")
+    async def recommendations(req: RecommendationRequest):
         charts = beatport.top_100()
         if isinstance(charts, dict) and charts.get("error"):
             return {"ok": False, "error": charts.get("error")}
 
         related = []
-        if request.genre:
-            related = [item for item in charts if request.genre.lower() in (item.get("release") or "").lower()]
+        if req.genre:
+            related = [
+                item for item in charts if req.genre.lower() in (item.get("release") or "").lower()
+            ]
 
         if not related:
             nodes = graph.summary().get("unknown_terms", [])
-            related = [item for item in charts if any(n in ((item.get("title") or "") + " " + (item.get("artist") or "")).lower() for n in nodes)]
+            related = [
+                item
+                for item in charts
+                if any(
+                    n in ((item.get("title") or "") + " " + (item.get("artist") or "")).lower()
+                    for n in nodes
+                )
+            ]
 
         if not related:
             related = charts[:10]
 
         return {"ok": True, "recommendations": related[:20]}
 
-    @app.get("/graph/summary")
-    def graph_summary():
-        return {"ok": True, "summary": graph.summary()}
+    # ─── Admin SPA Static Files ───
 
-    @app.post("/graph/learn")
-    def graph_learn(payload: dict):
-        t = payload.get("text") or ""
-        terms = graph.learn_from_text(t)
-        return {"ok": True, "learned": terms}
+    admin_build_dir = os.path.join(os.path.dirname(__file__), "..", "..", "admin", "build")
+    admin_build_dir = os.path.abspath(admin_build_dir)
 
-    class GenerateBeatRequest(BaseModel):
-        model_path: str | None = None
-        bpm: int = 120
-        bars: int = 4
-        temperature: float = 1.0
-        export_wav: bool = False
+    if os.path.isdir(admin_build_dir):
+        # Serve static assets
+        assets_dir = os.path.join(admin_build_dir, "assets")
+        if os.path.isdir(assets_dir):
+            app.mount("/admin/assets", StaticFiles(directory=assets_dir), name="admin-assets")
 
-    @app.post("/generate-beat")
-    def generate_beat(request: GenerateBeatRequest):
-        try:
-            from app.ai.beat_playback import play_generated_beat
-            from app.ai.beat_playback import load_model
-        except Exception as exc:
-            return {"ok": False, "error": f"beat_playback import failed: {exc}"}
-
-        export_path = None
-        if request.export_wav:
-            export_path = f"generated_beat_{int(time.time())}.wav"
-
-        try:
-            # if a cached model exists and no explicit model_path provided, use cached model
-            model_path_to_use = request.model_path
-            global cached_model, cached_model_path
-            if not model_path_to_use and cached_model is not None:
-                # pass the cached model by path indirection: beat_playback.load_model will handle None
-                model_path_to_use = cached_model_path
-
-            result = play_generated_beat(
-                model_path=model_path_to_use,
-                bpm=request.bpm,
-                bars=request.bars,
-                temperature=request.temperature,
-                play=False,
-                export_path=export_path,
-            )
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
-
-        return {"ok": True, "result": result}
-
-    class LoadModelRequest(BaseModel):
-        model_path: str
-
-    @app.post("/load-model")
-    def load_model_endpoint(req: LoadModelRequest):
-        try:
-            from app.ai.beat_playback import load_model
-        except Exception as exc:
-            return {"ok": False, "error": f"import failed: {exc}"}
-
-        global cached_model, cached_model_path
-        try:
-            cached_model = load_model(req.model_path)
-            cached_model_path = req.model_path
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
-
-        return {"ok": True, "model_path": cached_model_path}
-
-    @app.post("/unload-model")
-    def unload_model_endpoint():
-        global cached_model, cached_model_path
-        cached_model = None
-        cached_model_path = None
-        return {"ok": True}
-
-    @app.get("/model-status")
-    def model_status():
-        return {"ok": True, "loaded": cached_model is not None, "model_path": cached_model_path}
-
-    class SubscribeRequest(BaseModel):
-        email: str
-        plan: str
-
-    @app.post("/subscribe")
-    def subscribe(req: SubscribeRequest):
-        # Create a checkout and return provider URL placeholder
-        checkout = billing_service.create_checkout(req.plan, req.email)
-        if not checkout.get("ok"):
-            return {"ok": False, "error": "checkout_failed"}
-        return {"ok": True, "checkout": checkout}
-
-    @app.get("/download/pack/{pack_id}")
-    def download_pack(pack_id: str, license_sig: str | None = None):
-        # Simple protection: require a valid signed license payload via query string 'license_sig' or header.
-        # In production, use Authorization header and TLS, and validate server-side entitlements.
-        license_header = license_sig
-        if not license_header:
-            return {"ok": False, "error": "MISSING_LICENSE"}
-
-        # license data should be passed as JSON string signature; here we perform a naive verification
-        try:
-            import json
-            license_data = json.loads(license_header)
-        except Exception:
-            return {"ok": False, "error": "INVALID_LICENSE_FORMAT"}
-
-        if not license_service.verify(license_data):
-            return {"ok": False, "error": "INVALID_LICENSE"}
-
-        # if license ok, return pack metadata and a download URL (placeholder)
-        # resolve pack via archive
-        pack = None
-        try:
-            pack = cloud_service.archive.find_pack(pack_id)
-        except Exception:
-            pack = None
-
-        if not pack:
-            return {"ok": False, "error": "PACK_NOT_FOUND"}
-
-        # return the cloud_service download response
-        download_resp = cloud_service.download_pack(pack_id, {"licensed": True, "plan": "DJ_ARCHIVE", "entitlements": {"dj_archive_downloads": True}})
-        if not download_resp.get("ok"):
-            return {"ok": False, "error": download_resp.get("reason")}
-
-        return {"ok": True, "pack": pack, "download": download_resp.get("download")}
+        @app.get("/admin/{path:path}")
+        async def serve_admin_spa(path: str):
+            """Serve React SPA with client-side routing fallback to index.html."""
+            file_path = os.path.join(admin_build_dir, path)
+            if os.path.isfile(file_path):
+                return FileResponse(file_path)
+            # SPA fallback
+            return FileResponse(os.path.join(admin_build_dir, "index.html"))
 
     return app
 
 
-if FastAPI is not None:
-    app = create_app()
-else:
-    app = None
+# ─── Entrypoint ───
+
+app = create_app()
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("DJ_AI_OS_API_PORT", "8000"))
+    uvicorn.run(
+        "app.server.api:app",
+        host="0.0.0.0",
+        port=port,
+        reload=os.environ.get("DJ_AI_OS_API_RELOAD", "false").lower() == "true",
+    )

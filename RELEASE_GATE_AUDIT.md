@@ -41,8 +41,8 @@
 
 | # | Blocker | Description |
 |---|---------|-------------|
-| **P1-1** | CI/CD Pipeline Missing | Manual QA only; regression risk. |
-| **P1-2** | API Rate Limiting Missing | `/activate`, `/entitlements` vulnerable to brute-force. |
+| **P1-1** | CI/CD Pipeline Missing | READY — awaiting GitHub Actions (CI workflow committed, pending GitHub push/execution). |
+| **P1-2** | API Rate Limiting Missing | CLOSED — Fixed-window in-memory rate limiter implemented; 8 tests PASS; limits: activate/entitlements 30/min, checkout/portal 10/min; health & Stripe webhook excluded. |
 | **P1-3** | EXE-Level Update Strategy | Module update only; bootloader/exe replacement undefined. |
 
 ### P2 — POST RELEASE (Tech Debt)
@@ -69,7 +69,7 @@
 **Blocker count:**
 - **P0-1** — OPEN (code + ops): codesign requires EV cert (external purchase).
 - **P0-5** — CODE AUDITED ✅, OPS PENDING: signature/idempotency/audit all verified in code; remaining gate is Stripe CLI E2E + `STRIPE_WEBHOOK_SECRET` rotation runbook. Becomes a non-blocker if V1.0 launches free-only (billing deferred to V1.1).
-- 2 P1 (P1-2 rate-limit, P1-3 EXE update) remain deferred-with-mitigation.
+- 1 P1 (P1-3 EXE update) remains deferred-with-mitigation. P1-2 rate-limit is CLOSED.
 
 **Resolution estimate:** P0-1 ~1 week (cert) + 1 day (build hook); P0-5 ops ~1 day (Stripe CLI E2E + runbook). No code changes required for either.
 
@@ -208,7 +208,7 @@
 
 ## NOTES
 
-- P1-1 (CI/CD), P1-2 (rate-limit), P1-3 (EXE update strategy) are P1 risks — can ship with mitigations (manual QA, WAF rate-limit, documented EXE replacement).
+- P1-1 (CI/CD) READY — awaiting GitHub Actions; P1-2 (rate-limit) CLOSED; P1-3 (EXE update strategy) deferred with mitigation (documented EXE replacement).
 - P2 items (ORB merge, main_window refactor, docs) explicitly deferred to V1.1+.
 - No production code changes in this audit — analysis only.
 - Remix AI / Remix Engine / ORB / main_window untouched per constraints.
