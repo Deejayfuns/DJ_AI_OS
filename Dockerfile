@@ -1,0 +1,36 @@
+# DJ AI OS — Multi-stage Docker build
+# Stage 1: Build React admin SPA
+# Stage 2: Python API server
+
+# ─── Stage 1: Admin SPA ───
+FROM node:20-alpine AS admin-build
+
+WORKDIR /admin
+COPY admin/package*.json ./
+RUN npm install
+COPY admin/ ./
+RUN npm run build
+
+# ─── Stage 2: Python API ───
+FROM python:3.12-slim AS api
+
+WORKDIR /app
+
+# System deps for torch/audio
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg libsndfile1 portaudio19-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ ./app/
+COPY tools/ ./tools/
+COPY alembic.ini ./
+# Copy built admin SPA from stage 1
+COPY --from=admin-build /admin/build ./admin/build
+
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8000
+
+CMD ["uvicorn", "app.server.run:app", "--host", "0.0.0.0", "--port", "8000"]
