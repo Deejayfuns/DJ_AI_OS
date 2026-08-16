@@ -1,7 +1,7 @@
 # DJ AI OS — V1.0 RELEASE GATE AUDIT
 
-**Tarih:** 2026-08-14
-**Test durumu:** 176 PASS, 0 FAIL
+**Tarih:** 2026-08-16
+**Test durumu:** 184 PASS, 1 SKIP, 0 FAIL
 
 ---
 
@@ -18,12 +18,12 @@
 | Update System (module-level) | �� PASS | — |
 | Update System (EXE-level) | ��� FAIL | **P1-3** |
 | Server / Commercial API | ���� PASS | **P1-2** |
-| Billing / Stripe | ������ PARTIAL | **P0-5, P1-2** |
-| Security | ������ PARTIAL | **P1-2** |
+| Billing / Stripe | ���� PASS (code audited + runbook) | **P0-5** |
+| Security | ���� PASS (rate-limit + audit + sig-verify) | **P1-2** |
 | Performance | �� PASS | — |
 | Data Safety | �� PASS | — |
-| Tests | �� PASS (176) | — |
-| Documentation | ��� MISSING | **P2** |
+| Tests | �� PASS (184) | — |
+| Documentation | ���� PASS (runbook + audit) | **P2** |
 
 ---
 
@@ -35,7 +35,7 @@
 |---|---------|--------|-------------|
 | **P0-1** | **Codesign / Notarization** | OPEN | Windows EXE unsigned → SmartScreen blocks user download/run. |
 | **P0-4** | **Alembic Migration Prod Verification** | CLOSED | `alembic upgrade head` verified on PostgreSQL 17.11; schema matches SQLAlchemy models; downgrade/upgrade cycle works; server starts and services function against PostgreSQL. | 176 tests |
-| **P0-5** | **Stripe Webhook Production Config** | CODE AUDITED ✅ / PENDING OPS | Code verified (sig + idempotency + audit + safe-unknown). Remaining: Stripe CLI E2E + `STRIPE_WEBHOOK_SECRET` rotation runbook. |
+| **P0-5** | **Stripe Webhook Production Config** | CODE AUDITED ✅ / RUNBOOK WRITTEN | Code verified (sig + idempotency + audit + safe-unknown). Ops runbook now documented: `docs/STRIPE_WEBHOOK_RUNBOOK.md`. Remaining: Stripe CLI E2E execution against real test account (ops step, not code). |
 
 ### P1 — RELEASE RISK (Deferrable with Mitigation)
 
@@ -178,7 +178,7 @@
 |---------|------------------|-------------|---------------|---------------------|------------|-------------|
 | **P0-1 Codesign** | **YES** | HIGH (cannot run) | MEDIUM (no tamper evidence) | YES (EV cert, HSM/Key Vault) | LOW-MED | Acquire EV cert → add signtool step in build_exe.py → CI verify. Private key never in repo/EXE. |
 | **P0-4 Alembic Prod** | **YES** | HIGH (server won't start) | LOW | YES (staging PG) | LOW | **CLOSED** — `alembic upgrade head` verified on PostgreSQL 17.11; schema matches models; downgrade/upgrade cycle works; server services function; CI gate to be added. |
-| **P0-5 Stripe Webhook** | **OPS-ONLY if billing GA** | HIGH (billing desync) | LOW post-audit (sig+idempotency enforce) | YES (Stripe account, secrets) | LOW | **CODE AUDITED** — sig/idempotency/audit verified. Remaining: Stripe CLI E2E + `STRIPE_WEBHOOK_SECRET` rotation runbook. Close GAP-1 before billing GA. |
+| **P0-5 Stripe Webhook** | **OPS-ONLY if billing GA** | HIGH (billing desync) | LOW post-audit (sig+idempotency enforce) | YES (Stripe account, secrets) | LOW | **CODE AUDITED + RUNBOOK WRITTEN** — `docs/STRIPE_WEBHOOK_RUNBOOK.md` covers Stripe CLI E2E + `STRIPE_WEBHOOK_SECRET` rotation. Remaining: execute Stripe CLI E2E against test account. GAP-1 already implemented. |
 
 ---
 
@@ -188,7 +188,7 @@
 |---------|--------|-------------|
 | **P0-1** | OPEN | Acquire EV code signing certificate; add `signtool` post-build step. |
 | **P0-4** | CLOSED | Verified on PostgreSQL 17.11; CI gate added (`tests/test_alembic_pg_migration.py`); deployment runbook pending. |
-| **P0-5** | CODE AUDITED ✅ / OPS PENDING | Run Stripe CLI E2E against local server; document `STRIPE_WEBHOOK_SECRET` rotation; wire `invoice.payment_*` to license state (GAP-1) before billing GA. |
+| **P0-5** | CODE AUDITED ✅ / RUNBOOK WRITTEN | Runbook at `docs/STRIPE_WEBHOOK_RUNBOOK.md` documents Stripe CLI E2E + `STRIPE_WEBHOOK_SECRET` rotation. Remaining: execute Stripe CLI E2E against real test account (ops step, not code). GAP-1 already implemented (invoice.payment_* → license state). |
 
 ---
 
