@@ -95,98 +95,22 @@ jobs:
           done
 
       - name: Verify alembic heads
-        run: |
-          import os
-          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
-          from alembic.config import Config
-          from alembic.script import ScriptDirectory
-          cfg = Config('alembic.ini')
-          cfg.set_main_option('script_location', 'app/server/db/migrations')
-          cfg.set_main_option('sqlalchemy.url', os.environ['DJ_AI_OS_DATABASE_URL'])
-          cfg.set_main_option('prepend_sys_path', '.')
-          cfg.config_file_name = 'alembic.ini'
-          heads = ScriptDirectory.from_config(cfg).get_heads()
-          print('Alembic heads:', heads)
-          assert heads == ['0001_initial'], f'Expected single head 0001_initial, got: {heads}'
+        run: python tools/ci/verify_alembic_heads.py
 
       - name: alembic upgrade head
-        run: |
-          import os
-          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
-          from alembic.config import Config
-          from alembic import command
-          cfg = Config('alembic.ini')
-          cfg.set_main_option('script_location', 'app/server/db/migrations')
-          cfg.set_main_option('sqlalchemy.url', os.environ['DJ_AI_OS_DATABASE_URL'])
-          cfg.set_main_option('prepend_sys_path', '.')
-          cfg.config_file_name = 'alembic.ini'
-          command.upgrade(cfg, 'head')
-          print('alembic upgrade head: SUCCESS')
+        run: python tools/ci/alembic_upgrade_head.py
 
       - name: Verify migration created all tables
-        run: |
-          import os
-          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
-          from sqlalchemy import create_engine, inspect
-          engine = create_engine(os.environ['DJ_AI_OS_DATABASE_URL'].replace('+asyncpg', ''), future=True)
-          tables = set(inspect(engine).get_table_names())
-          expected = {'users', 'licenses', 'machine_activations', 'subscriptions', 'webhook_events', 'audit_log', 'alembic_version'}
-          missing = expected - tables
-          assert not missing, f'Missing tables: {missing}'
-          print('All 7 tables present:', sorted(tables))
-          engine.dispose()
+        run: python tools/ci/verify_migration_tables.py
 
       - name: Verify schema matches SQLAlchemy models
-        run: |
-          import os
-          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
-          from sqlalchemy import create_engine, inspect
-          from app.server.db.models import Base
-          engine = create_engine(os.environ['DJ_AI_OS_DATABASE_URL'].replace('+asyncpg', ''), future=True)
-          with engine.connect() as conn:
-              inspector = inspect(engine)
-              model_tables = {t.name for t in Base.metadata.sorted_tables}
-              for table in Base.metadata.sorted_tables:
-                  migrated_cols = {c['name'] for c in inspector.get_columns(table.name)}
-                  model_cols = {c.name for c in table.columns}
-                  assert migrated_cols == model_cols, f'Column mismatch in {table.name}: migrated={migrated_cols} model={model_cols}'
-          print('Schema matches models: PASS')
-          engine.dispose()
+        run: python tools/ci/verify_schema_matches.py
 
       - name: alembic downgrade base + re-upgrade (idempotent cycle)
-        run: |
-          import os
-          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
-          from alembic.config import Config
-          from alembic import command
-          cfg = Config('alembic.ini')
-          cfg.set_main_option('script_location', 'app/server/db/migrations')
-          cfg.set_main_option('sqlalchemy.url', os.environ['DJ_AI_OS_DATABASE_URL'])
-          cfg.set_main_option('prepend_sys_path', '.')
-          cfg.config_file_name = 'alembic.ini'
-          command.downgrade(cfg, 'base')
-          command.upgrade(cfg, 'head')
-          print('Downgrade/Upgrade cycle: PASS')
+        run: python tools/ci/alembic_downgrade_upgrade_cycle.py
 
       - name: Server smoke test (TestClient against PostgreSQL)
-        run: |
-          import os
-          os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
-          os.environ['DJ_AI_OS_INIT_DB'] = 'true'
-          os.environ['LC_ALL'] = 'C'
-          os.environ['LANG'] = 'C'
-          from fastapi.testclient import TestClient
-          from app.server.run import app
-          with TestClient(app) as client:
-              r = client.get('/health')
-              assert r.status_code == 200, f'Health check failed: {r.status_code} {r.text}'
-              assert r.json().get('ok') is True
-              print('Server health: OK')
-              r2 = client.get('/api/update/manifest')
-              print(f'Manifest endpoint: {r2.status_code} (expected 200 or 500)')
-              from app.license.license_manager import LicenseManager
-              from app.license.entitlements import EntitlementManager
-              print('License/Entitlement imports: OK')
+        run: python tools/ci/server_smoke_test.py
 
   pg-migration-test-file:
     name: PostgreSQL Migration Test File
@@ -304,10 +228,7 @@ jobs:
         run: python build_exe.py --clean
 
       - name: Verify build_exe.py imports (dry run)
-        run: |
-          import build_exe
-          print('build_exe.py imports OK')
-          print('Version:', build_exe.get_version())
+        run: python tools/ci/verify_build_exe_imports.py
 
       - name: Build (onedir mode) — optional, may take 3-5 min
         run: python build_exe.py
