@@ -29,6 +29,7 @@ dependencies = [
     "alembic",
     "stripe",
     "httpx",
+    "psycopg2-binary",
 ]
 
 [project.optional-dependencies]
