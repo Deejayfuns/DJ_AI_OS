@@ -22,5 +22,9 @@ neural = [
     "torchaudio",
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

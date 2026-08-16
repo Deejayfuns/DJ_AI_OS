@@ -1,0 +1,16 @@
+
+[dev]
+pytest
+
+[neural]
+torch
+torchaudio
+
+[server]
+fastapi
+uvicorn
+pydantic
+python-dotenv
+httptools
+watchfiles
+websockets

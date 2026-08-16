@@ -99,13 +99,13 @@ jobs:
           import os
           os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
           from alembic.config import Config
-          from alembic import command
+          from alembic.script import ScriptDirectory
           cfg = Config('alembic.ini')
           cfg.set_main_option('script_location', 'app/server/db/migrations')
           cfg.set_main_option('sqlalchemy.url', os.environ['DJ_AI_OS_DATABASE_URL'])
           cfg.set_main_option('prepend_sys_path', '.')
           cfg.config_file_name = 'alembic.ini'
-          heads = command.heads(cfg)
+          heads = ScriptDirectory.from_config(cfg).get_heads()
           print('Alembic heads:', heads)
           assert heads == ['0001_initial'], f'Expected single head 0001_initial, got: {heads}'
 
@@ -295,8 +295,10 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install PyInstaller
-        run: pip install pyinstaller
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,server]" 2>/dev/null || pip install pytest
+          pip install pyinstaller
 
       - name: Check build_exe.py syntax
         run: python build_exe.py --clean
