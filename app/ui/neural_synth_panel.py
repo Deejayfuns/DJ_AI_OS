@@ -215,6 +215,10 @@ class NeuralSynthPanel(ctk.CTkFrame):
         threading.Thread(target=_w, daemon=True).start()
 
     def _vae_ready_changed(self, ok):
+        if not self.winfo_exists():
+            return
+        if not hasattr(self, "vae_lbl") or not self.vae_lbl.winfo_exists():
+            return
         self._vae_ready = ok
         self.vae_lbl.configure(text="HAZIR" if ok else "N/A",
                                text_color=RED if ok else TEXT_DIM)
@@ -358,6 +362,12 @@ class NeuralSynthPanel(ctk.CTkFrame):
         self.status_lbl.configure(text=text)
 
     def on_close(self):
+        if self._preview_job:
+            try:
+                self.after_cancel(self._preview_job)
+                self._preview_job = None
+            except Exception:
+                pass
         self._preview_stop()
 
 

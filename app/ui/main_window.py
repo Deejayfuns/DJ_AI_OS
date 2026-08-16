@@ -3987,7 +3987,7 @@ class MainWindow(ctk.CTk):
 
         source = self.library or self.saved_tracks
 
-        self.library_map = LibraryMap(self.content, width=850, height=480)
+        self.library_map = _load_ai_class("LibraryMap")(self.content, width=850, height=480)
         self.library_map.pack(fill="both", expand=True, pady=(0, 10))
         self.library_map.set_tracks(source)
 

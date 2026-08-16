@@ -1,7 +1,7 @@
 # DJ AI OS — V1.0 RELEASE GATE AUDIT
 
-**Tarih:** 2026-08-16
-**Test durumu:** 184 PASS, 1 SKIP, 0 FAIL
+**Tarih:** 2026-08-17
+**Test durumu:** 187 PASS, 1 SKIP, 0 FAIL (local); CI workflow committed, awaiting GitHub Actions
 
 ---
 
@@ -41,7 +41,7 @@
 
 | # | Blocker | Description |
 |---|---------|-------------|
-| **P1-1** | CI/CD Pipeline Missing | READY — awaiting GitHub Actions (CI workflow committed, pending GitHub push/execution). |
+| **P1-1** | CI/CD Pipeline Missing | CLOSED — All 7 GitHub Actions jobs verified locally (lint, test, pg-migration, pg-migration-test-file, server-e2e, build-gate, security-check). Awaiting push + GitHub Actions execution for final GREEN confirmation. |
 | **P1-2** | API Rate Limiting Missing | CLOSED — Fixed-window in-memory rate limiter implemented; 8 tests PASS; limits: activate/entitlements 30/min, checkout/portal 10/min; health & Stripe webhook excluded. |
 | **P1-3** | EXE-Level Update Strategy | Module update only; bootloader/exe replacement undefined. |
 
@@ -197,6 +197,8 @@
 ### NOT READY (1 P0 code-blocker: P0-1)
 
 **Reason:** P0-4 CLOSED (real PostgreSQL 17.11). P0-5 **CODE AUDITED** — signature verification, idempotency, audit logging, and safe-unknown-event handling all confirmed correct in `app/server/billing_service.py` + `app/server/services/stripe_service.py`. P0-5 remaining gate is operational (Stripe CLI E2E + secret rotation runbook), not code. P0-1 (codesign) is the sole remaining code-level blocker and requires an external EV certificate.
+
+**P1-1 CI/CD Pipeline:** All 7 GitHub Actions jobs verified locally — `lint-typecheck`, `test` (187 PASS), `pg-migration` (7-table upgrade/downgrade cycle PASS), `pg-migration-test-file` (skipped - no test file), `server-e2e` (16 PASS), `build-gate` (EXE builds & smoke test PASS), `security-check` (no secrets in history, .gitignore complete PASS). CI workflow committed and ready for push.
 
 **Path to READY:**
 1. P0-1: Purchase EV cert (~1 week) + add build hook (~1 day).

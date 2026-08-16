@@ -11,6 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import tkinter as tk
+import customtkinter as ctk
+
 from app.ai.music_ai import MusicAI
 from app.ai.audio_analyzer import AudioAnalyzer
 from app.ai.ai_ear import AIEar
@@ -1760,6 +1763,56 @@ def test_deck_engine_bpm_match_report():
     assert report["matched"] is True
     assert report["diff"] == 2.0
     assert report["harmonic_match"] is True
+
+
+def _make_tk_root():
+    """Headless Tk root for GUI component tests."""
+    root = tk.Tk()
+    root.withdraw()
+    return root
+
+
+def test_library_map_lazy_load_resolves_class():
+    # Regression for BUG 1: LibraryMap must resolve via the lazy-load
+    # helper (_load_ai_class) used by MainWindow, not a bare module import.
+    from app.ui.main_window import _load_ai_class
+    cls = _load_ai_class("LibraryMap")
+    assert cls is not None
+    assert cls.__name__ == "LibraryMap"
+
+
+def test_library_map_builds_without_nameerror():
+    # Regression for BUG 1: LibraryMap can be instantiated (widget tree
+    # builds without NameError: name 'LibraryMap' is not defined).
+    root = _make_tk_root()
+    try:
+        from app.ui.library_map import LibraryMap
+        widget = LibraryMap(root, width=200, height=100)
+        assert widget.winfo_exists()
+        widget.destroy()
+    finally:
+        root.destroy()
+
+
+def test_neural_synth_panel_vae_callback_guards_destroyed_widget():
+    # Regression for BUG 2: after widget.destroy(), a delayed VAE-ready
+    # callback must not touch a missing label (TclError).
+    root = _make_tk_root()
+    try:
+        import threading
+
+        from app.ui.neural_synth_panel import NeuralSynthPanel
+        panel = NeuralSynthPanel(root)
+        panel.update_idletasks()
+        # Simulate the panel being torn down (view switch) before the
+        # background VAE thread fires its after(0, ...) callback.
+        panel.destroy()
+        assert not panel.winfo_exists()
+        # This must return cleanly, not raise _tkinter.TclError.
+        panel._vae_ready_changed(True)
+        panel._vae_ready_changed(False)
+    finally:
+        root.destroy()
 
 
 if __name__ == "__main__":
