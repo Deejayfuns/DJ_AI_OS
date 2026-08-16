@@ -4,23 +4,58 @@ version = "0.1.0"
 description = "DJ AI OS - desktop-first music library assistant for professional DJs"
 requires-python = ">=3.10"
 
-[project.optional-dependencies]
-server = [
+# Core deps required at import time by test-imported modules
+# (AI modules gracefully handle missing heavy deps via try/except)
+dependencies = [
+    "customtkinter",
+    "mutagen",
+    "cryptography",
+    "pygame",
+    "librosa",
+    "numpy",
+    "soundfile",
+    "audioread",
     "fastapi",
     "uvicorn",
     "pydantic",
-    "python-dotenv",
+    "SpeechRecognition",
+    "PyAudio",
+    "pyttsx3",
+    "edge-tts",
+    "sounddevice",
+    "vosk",
+    "windnd",
+    "opencv-python",
+    "requests",
+    "beautifulsoup4",
+    "mido",
+    "torch",
+    "torchaudio",
+    "pyyaml",
+    "msgpack",
+    "watchdog",
+    "zeroconf",
+    "sqlalchemy",
+    "asyncpg",
+    "aiosqlite",
+    "alembic",
+    "stripe",
+    "yt-dlp",
+    "scipy",
+    "httpx",
+]
+
+[project.optional-dependencies]
+server = [
     "httptools",
     "watchfiles",
     "websockets",
+    "python-dotenv",
 ]
 dev = [
     "pytest",
 ]
-neural = [
-    "torch",
-    "torchaudio",
-]
+neural = []
 
 [tool.setuptools.packages.find]
 where = ["."]
