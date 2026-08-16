@@ -44,6 +44,7 @@ dj_ai_os.zip
 build/
 dist/
 *.spec
+*.egg-info/
 
 # Üretilen ses dosyaları
 generated_beat_*.wav
