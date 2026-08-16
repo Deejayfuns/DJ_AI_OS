@@ -4,8 +4,9 @@ version = "0.1.0"
 description = "DJ AI OS - desktop-first music library assistant for professional DJs"
 requires-python = ">=3.10"
 
-# Core deps required at import time by test-imported modules
-# (AI modules gracefully handle missing heavy deps via try/except)
+# Minimal deps required at import time by test-imported modules.
+# Heavy ML/Audio/UI deps (torch, opencv, vosk, yt-dlp, etc.) are loaded
+# lazily inside methods via try/except — they are NOT required at import time.
 dependencies = [
     "customtkinter",
     "mutagen",
@@ -18,30 +19,15 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "pydantic",
-    "SpeechRecognition",
-    "PyAudio",
-    "pyttsx3",
-    "edge-tts",
-    "sounddevice",
-    "vosk",
-    "windnd",
-    "opencv-python",
     "requests",
     "beautifulsoup4",
     "mido",
-    "torch",
-    "torchaudio",
     "pyyaml",
-    "msgpack",
-    "watchdog",
-    "zeroconf",
     "sqlalchemy",
     "asyncpg",
     "aiosqlite",
     "alembic",
     "stripe",
-    "yt-dlp",
-    "scipy",
     "httpx",
 ]
 
@@ -54,6 +40,23 @@ server = [
 ]
 dev = [
     "pytest",
+]
+neural = [
+    "torch",
+    "torchaudio",
+    "opencv-python",
+    "vosk",
+    "yt-dlp",
+    "scipy",
+    "edge-tts",
+    "pyttsx3",
+    "sounddevice",
+    "pyaudio",
+    "windnd",
+    "SpeechRecognition",
+    "watchdog",
+    "zeroconf",
+    "msgpack",
 ]
 
 [tool.setuptools.packages.find]
