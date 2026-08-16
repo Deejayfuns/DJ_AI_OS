@@ -55,7 +55,6 @@ server = [
 dev = [
     "pytest",
 ]
-neural = []
 
 [tool.setuptools.packages.find]
 where = ["."]
