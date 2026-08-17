@@ -1283,14 +1283,17 @@ def test_genre_review_approves_discovered_track():
 
 
 async def _make_session():
-    """In-memory async SQLite session for server-layer smoke tests."""
+    """In-memory async SQLite session for server-layer smoke tests.
+    Returns (session, engine) — caller must close session and dispose engine.
+    """
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    return factory()
+    session = factory()
+    return session, engine
 
 
 def test_commercial_api_local_activation_fallback():
@@ -1320,35 +1323,39 @@ def test_server_license_activation_and_entitlements():
     import app.license.signature as sig_mod
 
     async def _run():
-        session = await _make_session()
-        service = LicenseService(session)
+        session, engine = await _make_session()
+        try:
+            service = LicenseService(session)
 
-        from app.server.db.models import License
-        import secrets
-        from datetime import datetime, timedelta, timezone
+            from app.server.db.models import License
+            import secrets
+            from datetime import datetime, timedelta, timezone
 
-        now = datetime.now(timezone.utc)
-        lic = License(
-            id=secrets.token_hex(16),
-            user_id=secrets.token_hex(16),
-            key="ARCHIVE-12345678",
-            plan="DJ_ARCHIVE",
-            issued_at=now,
-            expires_at=now + timedelta(days=365),
-            max_tracks=50000,
-            updates_until=now + timedelta(days=90),
-            is_active=True,
-            signature_nonce=secrets.token_hex(32),
-        )
-        session.add(lic)
-        await session.flush()
+            now = datetime.now(timezone.utc)
+            lic = License(
+                id=secrets.token_hex(16),
+                user_id=secrets.token_hex(16),
+                key="ARCHIVE-12345678",
+                plan="DJ_ARCHIVE",
+                issued_at=now,
+                expires_at=now + timedelta(days=365),
+                max_tracks=50000,
+                updates_until=now + timedelta(days=90),
+                is_active=True,
+                signature_nonce=secrets.token_hex(32),
+            )
+            session.add(lic)
+            await session.flush()
 
-        activated = await service.activate(
-            "dj@example.com",
-            "ARCHIVE-12345678",
-            "machine-1"
-        )
-        return activated
+            activated = await service.activate(
+                "dj@example.com",
+                "ARCHIVE-12345678",
+                "machine-1"
+            )
+            return activated
+        finally:
+            await session.close()
+            await engine.dispose()
 
     # Force NO_SIGNING_KEY path (packaged client reality)
     orig = sig_mod.has_signing_key
@@ -1366,14 +1373,18 @@ def test_server_billing_checkout_and_webhook_contract():
     import asyncio
 
     async def _run():
-        session = await _make_session()
-        billing = BillingService(session)
-        return await billing.create_checkout(
-            "PRO",
-            "dj@example.com",
-            "https://success",
-            "https://cancel"
-        )
+        session, engine = await _make_session()
+        try:
+            billing = BillingService(session)
+            return await billing.create_checkout(
+                "PRO",
+                "dj@example.com",
+                "https://success",
+                "https://cancel"
+            )
+        finally:
+            await session.close()
+            await engine.dispose()
 
     checkout = asyncio.run(_run())
     # Stripe not configured in test → fails cleanly, no crash
@@ -1385,17 +1396,21 @@ def test_server_cloud_download_requires_entitlement():
     import asyncio
 
     async def _run():
-        session = await _make_session()
-        cloud = CloudService(session)
-        return await cloud.download_pack(
-            "monthly_tech_house_essentials",
-            {
-                "licensed": False,
-                "plan": "DEMO",
-                "entitlements": {"dj_archive_downloads": False},
-                "nonce": "nonexistent",
-            }
-        )
+        session, engine = await _make_session()
+        try:
+            cloud = CloudService(session)
+            return await cloud.download_pack(
+                "monthly_tech_house_essentials",
+                {
+                    "licensed": False,
+                    "plan": "DEMO",
+                    "entitlements": {"dj_archive_downloads": False},
+                    "nonce": "nonexistent",
+                }
+            )
+        finally:
+            await session.close()
+            await engine.dispose()
 
     blocked = asyncio.run(_run())
     assert blocked["ok"] is False
@@ -1419,11 +1434,11 @@ def test_rate_limit_allows_requests_under_limit():
     async def activate():
         return {"ok": True}
 
-    client = TestClient(app)
-    for _ in range(5):
-        r = client.post("/api/activate", json={})
-        assert r.status_code == 200
-        assert r.json()["ok"] is True
+    with TestClient(app) as client:
+        for _ in range(5):
+            r = client.post("/api/activate", json={})
+            assert r.status_code == 200
+            assert r.json()["ok"] is True
 
 
 def test_rate_limit_blocks_exceeding_limit():
@@ -1440,20 +1455,20 @@ def test_rate_limit_blocks_exceeding_limit():
     async def activate():
         return {"ok": True}
 
-    client = TestClient(app)
-    # Default limit for /api/activate is 30/min; send 35
-    last_status = None
-    for i in range(35):
-        r = client.post("/api/activate", json={})
-        last_status = r.status_code
-        if r.status_code == 429:
-            assert "Retry-After" in r.headers
-            assert r.headers["Retry-After"].isdigit()
-            assert int(r.headers["Retry-After"]) > 0
-            assert r.json()["detail"] == "Rate limit exceeded"
-            break
-    else:
-        assert False, "Expected 429 after exceeding rate limit"
+    with TestClient(app) as client:
+        # Default limit for /api/activate is 30/min; send 35
+        last_status = None
+        for i in range(35):
+            r = client.post("/api/activate", json={})
+            last_status = r.status_code
+            if r.status_code == 429:
+                assert "Retry-After" in r.headers
+                assert r.headers["Retry-After"].isdigit()
+                assert int(r.headers["Retry-After"]) > 0
+                assert r.json()["detail"] == "Rate limit exceeded"
+                break
+        else:
+            assert False, "Expected 429 after exceeding rate limit"
 
 
 def test_rate_limit_retry_after_present():
@@ -1470,14 +1485,14 @@ def test_rate_limit_retry_after_present():
     async def entitlements():
         return {"ok": True}
 
-    client = TestClient(app)
-    for i in range(35):
-        r = client.post("/api/entitlements", json={})
-        if r.status_code == 429:
-            retry = r.headers.get("Retry-After")
-            assert retry is not None
-            assert int(retry) > 0
-            return
+    with TestClient(app) as client:
+        for i in range(35):
+            r = client.post("/api/entitlements", json={})
+            if r.status_code == 429:
+                retry = r.headers.get("Retry-After")
+                assert retry is not None
+                assert int(retry) > 0
+                return
     assert False, "Expected 429 after exceeding rate limit"
 
 
@@ -1499,16 +1514,16 @@ def test_rate_limit_independent_buckets():
     async def entitlements():
         return {"path": "entitlements"}
 
-    client = TestClient(app)
-    # Exhaust /api/activate bucket (30 default)
-    for _ in range(30):
-        r = client.post("/api/activate", json={})
-        assert r.status_code == 200
+    with TestClient(app) as client:
+        # Exhaust /api/activate bucket (30 default)
+        for _ in range(30):
+            r = client.post("/api/activate", json={})
+            assert r.status_code == 200
 
-    # /api/entitlements should still be allowed (different bucket)
-    r = client.post("/api/entitlements", json={})
-    assert r.status_code == 200
-    assert r.json()["path"] == "entitlements"
+        # /api/entitlements should still be allowed (different bucket)
+        r = client.post("/api/entitlements", json={})
+        assert r.status_code == 200
+        assert r.json()["path"] == "entitlements"
 
 
 def test_rate_limit_health_unaffected():
@@ -1525,12 +1540,12 @@ def test_rate_limit_health_unaffected():
     async def health():
         return {"ok": True}
 
-    client = TestClient(app)
-    # Send many requests — should all succeed (no limit on /health)
-    for _ in range(50):
-        r = client.get("/health")
-        assert r.status_code == 200
-        assert r.json()["ok"] is True
+    with TestClient(app) as client:
+        # Send many requests — should all succeed (no limit on /health)
+        for _ in range(50):
+            r = client.get("/health")
+            assert r.status_code == 200
+            assert r.json()["ok"] is True
 
 
 def test_rate_limit_stripe_webhook_unaffected():
@@ -1547,12 +1562,12 @@ def test_rate_limit_stripe_webhook_unaffected():
     async def webhook():
         return {"ok": True}
 
-    client = TestClient(app)
-    # Send many requests — should all succeed (excluded path)
-    for _ in range(50):
-        r = client.post("/api/webhooks/stripe", json={})
-        assert r.status_code == 200
-        assert r.json()["ok"] is True
+    with TestClient(app) as client:
+        # Send many requests — should all succeed (excluded path)
+        for _ in range(50):
+            r = client.post("/api/webhooks/stripe", json={})
+            assert r.status_code == 200
+            assert r.json()["ok"] is True
 
 
 def test_rate_limit_checkout_lower_limit():
@@ -1569,15 +1584,15 @@ def test_rate_limit_checkout_lower_limit():
     async def checkout():
         return {"ok": True}
 
-    client = TestClient(app)
-    # Send 15 requests; limit is 10, so 11th+ should be 429
-    status_codes = []
-    for _ in range(15):
-        r = client.post("/api/checkout", json={})
-        status_codes.append(r.status_code)
-    # First 10 should be 200, rest 429
-    assert status_codes[:10] == [200] * 10
-    assert 429 in status_codes[10:]
+    with TestClient(app) as client:
+        # Send 15 requests; limit is 10, so 11th+ should be 429
+        status_codes = []
+        for _ in range(15):
+            r = client.post("/api/checkout", json={})
+            status_codes.append(r.status_code)
+        # First 10 should be 200, rest 429
+        assert status_codes[:10] == [200] * 10
+        assert 429 in status_codes[10:]
 
 
 def test_rate_limit_customer_portal_lower_limit():
@@ -1594,13 +1609,13 @@ def test_rate_limit_customer_portal_lower_limit():
     async def portal():
         return {"ok": True}
 
-    client = TestClient(app)
-    status_codes = []
-    for _ in range(15):
-        r = client.post("/api/customer-portal", json={})
-        status_codes.append(r.status_code)
-    assert status_codes[:10] == [200] * 10
-    assert 429 in status_codes[10:]
+    with TestClient(app) as client:
+        status_codes = []
+        for _ in range(15):
+            r = client.post("/api/customer-portal", json={})
+            status_codes.append(r.status_code)
+        assert status_codes[:10] == [200] * 10
+        assert 429 in status_codes[10:]
 
 
 # ============================================================

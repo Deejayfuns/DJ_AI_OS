@@ -135,6 +135,12 @@ def test_server(test_manifest, test_artifacts_dir, test_keys, tmp_path_factory):
     else:
         os.environ.pop("DJ_AI_OS_UPDATE_ARTIFACTS", None)
 
+    # Explicitly close the TestClient to dispose its event-loop-bound portal
+    try:
+        client.close()
+    except Exception:
+        pass
+
 
 def _make_engine(tmp_path):
     """Create UpdateEngine with a fake app_root containing old module versions."""

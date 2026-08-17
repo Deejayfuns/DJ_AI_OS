@@ -15,7 +15,9 @@ from app.server.api import create_app
 @pytest.fixture
 def client():
     app = create_app()
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c
+    # TestClient.__exit__ closes the portal/streams bound to the event loop
 
 
 def test_update_manifest_endpoint_returns_signed_manifest(client):
