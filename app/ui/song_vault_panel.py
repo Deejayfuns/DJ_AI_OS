@@ -32,8 +32,9 @@ class SongVaultPanel(ctk.CTkFrame):
                          border_width=1, border_color=BORDER)
         self.win = win
 
+        from app.core.paths import get_song_vault_dir
         self.engine = SongVault(
-            out_dir=os.path.join(os.getcwd(), "DJ_SONG_VAULT"),
+            out_dir=str(get_song_vault_dir()),
             fmt="mp3_320",
         )
 

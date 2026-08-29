@@ -153,8 +153,8 @@ class Sidebar(ctk.CTkFrame):
                 text=btn_text,
                 height=32,
                 corner_radius=4,
-                fg_color="transparent",
-                hover_color=SURFACE_RAISED if has_access else "transparent",
+                fg_color=SURFACE,
+                hover_color=SURFACE_RAISED if has_access else SURFACE,
                 text_color=text_color,
                 anchor="w",
                 font=("Segoe UI", 11),
@@ -375,7 +375,7 @@ class Sidebar(ctk.CTkFrame):
                 self.active_button = btn
             else:
                 btn.configure(
-                    fg_color="transparent",
+                    fg_color=SURFACE,
                     text_color=TEXT_SECONDARY if has_access else TEXT_DIM,
                     font=("Segoe UI", 11),
                     text=f" {icon(name)}  {label_text}",
@@ -403,7 +403,7 @@ class Sidebar(ctk.CTkFrame):
                     lock.configure(text="", text_color=TEXT_DIM)
             else:
                 btn.configure(
-                    hover_color="transparent",
+                    hover_color=SURFACE,
                     text_color=TEXT_DIM,
                 )
                 if lock:

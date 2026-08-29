@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, StaticPool
 
 from app.server.db.models import Base
 
@@ -46,9 +46,16 @@ def init_engine() -> AsyncEngine:
 
     url = get_database_url()
     is_sqlite = url.startswith("sqlite")
+    is_memory_sqlite = url.startswith("sqlite") and ":memory:" in url
 
-    # SQLite needs NullPool; PG can use default pool
-    poolclass = NullPool if is_sqlite else None
+    # In-memory SQLite needs StaticPool so all connections share the SAME database.
+    # File SQLite uses NullPool; PG uses default pool.
+    if is_memory_sqlite:
+        poolclass = StaticPool
+    elif is_sqlite:
+        poolclass = NullPool
+    else:
+        poolclass = None
     connect_args = {"check_same_thread": False} if is_sqlite else {}
 
     _engine = create_async_engine(
@@ -109,3 +116,12 @@ async def close_db() -> None:
         await _engine.dispose()
         _engine = None
         _session_factory = None
+
+
+async def reset_db() -> None:
+    """Reset database engine (for testing). Creates fresh in-memory DB."""
+    global _engine, _session_factory
+    if _engine is not None:
+        await _engine.dispose()
+    _engine = None
+    _session_factory = None

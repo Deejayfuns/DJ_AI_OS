@@ -2,6 +2,7 @@ import json
 import os
 
 from app.core.organizer import Organizer
+from app.core.paths import get_exports_dir, get_library_output_dir
 
 
 class ArchiveReconciler:
@@ -16,8 +17,10 @@ class ArchiveReconciler:
         "UNSORTED",
     }
 
-    def __init__(self, archive_root="DJ_LIBRARY_OUTPUT"):
+    def __init__(self, archive_root=None):
 
+        if archive_root is None:
+            archive_root = str(get_library_output_dir())
         self.archive_root = archive_root
         self.organizer = Organizer(archive_root)
 
@@ -156,8 +159,10 @@ class ArchiveReconciler:
             f"reclaimable_mb={round(reclaimable_bytes / (1024 * 1024), 2)}"
         )
 
-    def write_plan(self, plan, output_folder="DJ_EXPORTS"):
+    def write_plan(self, plan, output_folder=None):
 
+        if output_folder is None:
+            output_folder = str(get_exports_dir())
         os.makedirs(output_folder, exist_ok=True)
         path = os.path.abspath(
             os.path.join(output_folder, "archive_cleanup_plan_latest.json")
@@ -168,7 +173,10 @@ class ArchiveReconciler:
 
         return path
 
-    def quarantine_manifest(self, plan, quarantine_folder="DJ_EXPORTS/QUARANTINE"):
+    def quarantine_manifest(self, plan, quarantine_folder=None):
+
+        if quarantine_folder is None:
+            quarantine_folder = os.path.join(str(get_exports_dir()), "QUARANTINE")
 
         operations = []
 
@@ -201,9 +209,14 @@ class ArchiveReconciler:
     def write_quarantine_manifest(
         self,
         plan,
-        output_folder="DJ_EXPORTS",
-        quarantine_folder="DJ_EXPORTS/QUARANTINE"
+        output_folder=None,
+        quarantine_folder=None
     ):
+
+        if output_folder is None:
+            output_folder = str(get_exports_dir())
+        if quarantine_folder is None:
+            quarantine_folder = os.path.join(str(get_exports_dir()), "QUARANTINE")
 
         os.makedirs(output_folder, exist_ok=True)
         manifest = self.quarantine_manifest(plan, quarantine_folder)
@@ -238,7 +251,7 @@ class ArchiveReconciler:
         """
         qfolder = quarantine_folder or manifest.get(
             "quarantine_folder",
-            os.path.join(self.archive_root, "DJ_EXPORTS", "QUARANTINE"),
+            os.path.join(str(get_exports_dir()), "QUARANTINE"),
         )
 
         actions = []

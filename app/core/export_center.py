@@ -16,6 +16,8 @@ import hashlib
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
+from app.core.paths import get_exports_dir
+
 
 class ExportCenter:
     """
@@ -23,8 +25,8 @@ class ExportCenter:
     Supports all major DJ software formats.
     """
 
-    def __init__(self, output_folder: str = "DJ_EXPORTS"):
-        self.output_folder = output_folder
+    def __init__(self, output_folder: str = None):
+        self.output_folder = output_folder or str(get_exports_dir())
 
     # ============================================================
     # REKORDBOX XML (full format)

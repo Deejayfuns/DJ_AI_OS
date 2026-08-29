@@ -32,6 +32,7 @@ import numpy as np
 
 from .base import InstrumentPlugin, register
 from . import synth_core as sc
+from app.core.paths import get_exports_dir
 
 # Import once at module load so the first hit() render isn't slow.
 # scipy.signal.lfilter import is ~2-6s the first time; hoisting it here
@@ -282,7 +283,7 @@ PATCH_PRESETS = {
 # PATCH JSON STORE
 # ============================================================
 
-PATCH_DIR = os.path.join(os.getcwd(), "DJ_EXPORTS", "patches")
+PATCH_DIR = os.path.join(str(get_exports_dir()), "patches")
 
 
 def save_patch(patch, name=None, out_dir=PATCH_DIR):

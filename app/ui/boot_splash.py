@@ -17,6 +17,7 @@ online, ends with a neural boot chime, an ASTRA voice greeting and a
 
 import math
 import os
+import platform
 import queue
 import threading
 import time
@@ -85,6 +86,10 @@ class BootSplash(tk.Tk):
         self._core_waiting = False         # low-power mode while importing
         self._last_frame_t = None          # frame-time meter for the HUD
         self._frame_ms = 0
+
+        # Boot progress weights — must exist before _animate/_poll_core can run
+        self._weight_total = 8 * 9 + 18 + 10     # probes + core + final
+        self._weight_done = 0.0
 
         self._draw_static()
         self._after_id = self.after(FRAME_MS, self._animate)
@@ -340,31 +345,46 @@ class BootSplash(tk.Tk):
             pass  # no audio device — boot still completes
 
     def _boot_voice(self):
-        """ASTRA speaks a line as the system comes online — Windows SAPI via
-        PowerShell System.Speech. Fire-and-forget; silently no-ops if missing."""
+        """ASTRA speaks the boot greeting using the user-selected neural voice
+        (edge-tts). Fire-and-forget; silently no-ops if edge-tts is unavailable
+        or there is no network."""
         try:
-            import subprocess
-            from app.core.i18n import t, get_language
-            if get_language() == "tr":
-                msg = "Sistem hazir kaptan. Tum neural sistemler cevirimici. Hazir misin?"
-            elif get_language() == "en":
-                msg = "System ready captain. All neural systems online. Ready?"
-            elif get_language() == "de":
-                msg = "System bereit Captain. Alle neuralen Systeme online. Bereit?"
-            else:
-                msg = "Système prêt capitaine. Tous les systèmes neuronaux en ligne. Prêt ?"
-            ps = (
-                "Add-Type -AssemblyName System.Speech;"
-                "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer;"
-                "try{$s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Female)}catch{};"
-                "$s.Rate=1;$s.Volume=90;"
-                f"$s.Speak('{msg}')"
-            )
-            subprocess.Popen(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
-                creationflags=0x08000000, stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            from app.core import voice_config
+            voice_id = voice_config.get_voice_id()
+            msg = voice_config.get_boot_line(voice_id)
+            threading.Thread(
+                target=self._speak_edge_tts, args=(msg, voice_id), daemon=True
+            ).start()
+        except Exception:
+            pass
+
+    def _speak_edge_tts(self, text, voice):
+        """Speak `text` with the given edge-tts voice. Streams audio into memory
+        and plays it in-process via sounddevice — never writes a file or opens
+        an external media player. Any failure is swallowed so boot never blocks."""
+        try:
+            import asyncio
+            import io
+            import edge_tts
+
+            async def _stream():
+                audio = bytearray()
+                communicate = edge_tts.Communicate(text, voice)
+                async for chunk in communicate.stream():
+                    if chunk.get("type") == "audio":
+                        audio.extend(chunk.get("data", b""))
+                return bytes(audio)
+
+            audio_bytes = asyncio.run(_stream())
+            if not audio_bytes:
+                return
+
+            import sounddevice as sd
+            import soundfile as sf
+
+            data, sr = sf.read(io.BytesIO(audio_bytes))
+            sd.play(data, sr)
+            sd.wait()
         except Exception:
             pass
 

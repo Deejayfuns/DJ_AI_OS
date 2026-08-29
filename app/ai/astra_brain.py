@@ -17,6 +17,8 @@ Every command routes through here.
 import os
 from typing import Dict, List, Any, Optional
 
+from app.core.paths import get_exports_dir
+
 
 class AstraBrain:
     """
@@ -312,7 +314,7 @@ class AstraBrain:
             return {"action": "error", "reply": f"Stem hatasi: {result['error']}"}
 
         # Export
-        output_dir = "DJ_EXPORTS/stems"
+        output_dir = os.path.join(str(get_exports_dir()), "stems")
         paths = self.stem_engine.export_stems(result, output_dir)
 
         return {

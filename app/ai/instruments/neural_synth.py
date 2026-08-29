@@ -43,6 +43,7 @@ import numpy as np
 
 from .base import InstrumentPlugin, register, SR_DEFAULT
 from . import synth_core as sc
+from app.core.paths import get_exports_dir
 
 # ------------------------------------------------------------------
 # Lazy torch import — the plugin degrades gracefully without torch.
@@ -60,7 +61,7 @@ def _import_torch():
     return _torch if _torch is not False else None
 
 
-MODEL_DIR = os.path.join(os.getcwd(), "DJ_EXPORTS", "neural_models")
+MODEL_DIR = os.path.join(str(get_exports_dir()), "neural_models")
 
 
 # ==================================================================

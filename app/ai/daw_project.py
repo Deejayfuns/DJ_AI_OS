@@ -16,6 +16,8 @@ is plain JSON so projects save/load/share like DAW project files.
 import json
 import os
 
+from app.core.paths import get_exports_dir
+
 # Default 16-step on/off (kick pattern) used by new tracks
 DEFAULT_PATTERN = [1, 0, 0, 0] * 4
 

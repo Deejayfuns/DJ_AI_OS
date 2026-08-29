@@ -1,11 +1,21 @@
 import json
 import os
+import sys
+from pathlib import Path
 from datetime import datetime
 
 from app.license.machine_id import MachineID
 from app.license.license_schema import LicenseSchema
 from app.license.entitlements import EntitlementManager
 from app.license import signature as sig
+
+
+def _resolve_license_path() -> Path:
+    """Resolve license file path: frozen build → APPDATA/DJ_AI_OS/license.key, dev → repo root."""
+    if getattr(sys, "frozen", False):
+        base = Path(os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or Path.home())
+        return base / "DJ_AI_OS" / "license.key"
+    return Path.cwd() / "license.key"
 
 
 class LicenseManager:
@@ -16,7 +26,7 @@ class LicenseManager:
         self.schema = LicenseSchema()
         self.entitlements = EntitlementManager()
 
-        self.license_file = "license.key"
+        self.license_file = str(_resolve_license_path())
 
         self.owner_dev_mode = self.detect_owner_dev_mode()
 

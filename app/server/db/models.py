@@ -34,6 +34,7 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True)  # uuid4 hex
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    company_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -64,6 +65,8 @@ class License(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Ed25519 signature metadata
     signature_nonce: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # Revocation timestamp
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="licenses", lazy="selectin")
@@ -90,6 +93,7 @@ class MachineActivation(Base):
     activated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     max_machines: Mapped[int] = mapped_column(Integer, default=3, nullable=False)  # plan limit at activation time
+    deactivated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     license: Mapped["License"] = relationship(back_populates="machine_activations", lazy="selectin")

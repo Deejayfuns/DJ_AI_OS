@@ -19,6 +19,7 @@ from tkinter import filedialog
 
 import customtkinter as ctk
 
+from app.core.paths import get_exports_dir
 from app.ui.theme import (
     BG, SURFACE, SURFACE_RAISED, BORDER, RED, RED_HOVER, GREEN, AMBER, BLUE_BRIGHT,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM, F_H3, F_BODY, F_BODY_BOLD, F_META, F_MONO,
@@ -377,14 +378,14 @@ class LivePerformancePanel(ctk.CTkFrame):
         self.status_label.configure(text=text)
 
     def _export(self, mode):
-        import os
-        os.makedirs("DJ_EXPORTS", exist_ok=True)
+        exports_dir = str(get_exports_dir())
+        os.makedirs(exports_dir, exist_ok=True)
         bars = 4
         if mode == "mix":
-            path = self.engine.export_wav("DJ_EXPORTS/live_perf_mix.wav", bars=bars)
+            path = self.engine.export_wav(os.path.join(exports_dir, "live_perf_mix.wav"), bars=bars)
             self.set_status(f"MIX exported: {path} ({bars} bar)")
         else:
-            paths = self.engine.export_stems("DJ_EXPORTS/live_stems", bars=bars)
+            paths = self.engine.export_stems(os.path.join(exports_dir, "live_stems"), bars=bars)
             self.set_status(f"STEMS exported: {', '.join(list(paths.keys())[:4])}...")
 
     # ============================================================

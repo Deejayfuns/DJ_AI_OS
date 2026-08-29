@@ -15,11 +15,13 @@ import json
 import os
 import time
 
+from app.core.paths import get_exports_dir
+
 
 class SetRecorder:
 
-    def __init__(self, log_dir="DJ_EXPORTS"):
-        self.log_dir = log_dir
+    def __init__(self, log_dir=None):
+        self.log_dir = log_dir or str(get_exports_dir())
         self.recording = False
         self.session = None
         self._start_time = 0

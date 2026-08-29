@@ -6,9 +6,17 @@ Or: python -m app.server.run
 """
 
 import os
+import sys
+
+# Production startup validation (runs before app creation)
+from app.server.startup_validation import run_startup_validation
 
 from app.server.api import create_app
 from app.server.db.connection import init_db
+
+
+# Run production validation FIRST - fail fast if critical config missing
+run_startup_validation()
 
 
 # Initialize DB tables (dev only — prod uses Alembic)

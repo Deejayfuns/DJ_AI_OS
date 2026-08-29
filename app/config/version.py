@@ -8,7 +8,7 @@ Kural: Teknik sürüm DEĞİŞECEĞİNDE yalnızca bu dosya düzenlenir; pyproje
 ve build_exe.py artık kaynak değil, okuyucudur.
 """
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 
 # Marka etiketi (UI/title/splash). Teknik sürümden bağımsızdır.
 BRAND = "DJ AI OS v24 ULTRA PRODUCER"

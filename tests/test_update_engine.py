@@ -38,21 +38,21 @@ def remote(tmp_path):
         remote_dir = tmp_path / "remote"
         remote_dir.mkdir()
 
-        content = b'APP_VERSION = "0.2.0"\n'
+        content = b'APP_VERSION = "0.3.0"\n'
         mod_dir = remote_dir / "modules" / MODULE
         mod_dir.parent.mkdir(parents=True)
         mod_dir.write_bytes(content)
 
         manifest = {
-            "version": "0.2.0",
-            "min_client_version": "0.1.0",
+            "version": "0.3.0",
+            "min_client_version": "0.2.0",
             "released_at": "2026-08-12T00:00:00Z",
             "critical": False,
             "changelog": "test",
             "download_url": f"file://{remote_dir.as_posix()}",
             "modules": [{
                 "name": MODULE,
-                "version": "0.2.0",
+                "version": "0.3.0",
                 "sha256": hashlib.sha256(content).hexdigest(),
                 "size": len(content),
                 "hot_reload": False,
@@ -94,7 +94,7 @@ def test_check_detects_available(tmp_path, remote):
         {"entitlements": {"updates_active": True}}, offline_dir=str(remote_dir)
     )
     assert result["available"] is True
-    assert result["latest"] == "0.2.0"
+    assert result["latest"] == "0.3.0"
     assert result["manifest"]["signature"]
 
 
@@ -122,7 +122,7 @@ def test_apply_swaps_module(tmp_path, remote):
     assert res["ok"] is True
     assert res["hot_swapped"] == 1
     target = tmp_path / "app_root" / MODULE
-    assert "0.2.0" in target.read_text(encoding="utf-8")
+    assert "0.3.0" in target.read_text(encoding="utf-8")
 
 
 def test_bad_checksum_rolls_back(tmp_path, remote):
@@ -158,4 +158,4 @@ def test_critical_applies_without_approval(tmp_path, remote):
     res = engine.apply_update(manifest, user_approved=False)
     assert res["ok"] is True
     target = tmp_path / "app_root" / MODULE
-    assert "0.2.0" in target.read_text(encoding="utf-8")
+    assert "0.3.0" in target.read_text(encoding="utf-8")

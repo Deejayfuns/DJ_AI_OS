@@ -1,16 +1,33 @@
+import os
 import sqlite3
 import threading
 import json
+import sys
+from pathlib import Path
+
+
+def _resolve_db_path(db_path: str | None = None) -> Path:
+    """Resolve database path: use provided path, or default to frozen-aware location."""
+    if db_path:
+        return Path(db_path)
+    # Frozen build → APPDATA/DJ_AI_OS/dj_ai_library.db
+    if getattr(sys, "frozen", False):
+        base = Path(os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or Path.home())
+        return base / "DJ_AI_OS" / "dj_ai_library.db"
+    # Development → repo root
+    return Path.cwd() / "dj_ai_library.db"
 
 
 class AILibraryDB:
 
-    def __init__(self, db_path="dj_ai_library.db"):
+    def __init__(self, db_path: str | None = None):
+        resolved_path = _resolve_db_path(db_path)
+        resolved_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.lock = threading.Lock()
 
         self.conn = sqlite3.connect(
-            db_path,
+            str(resolved_path),
             check_same_thread=False
         )
 

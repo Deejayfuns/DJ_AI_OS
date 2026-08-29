@@ -229,6 +229,45 @@ class SettingsView(ViewBase):
             command=win.run_voice_diagnostics
         ).pack(side="left", padx=6, pady=4)
 
+        # Selectable neural voice model (persisted, used by boot greeting + assistant)
+        try:
+            from app.core import voice_config
+            current_voice = voice_config.get_voice_id()
+            voice_models = voice_config.get_voice_models()
+            voice_labels = [m["label"] for m in voice_models]
+            voice_id_by_label = {m["label"]: m["id"] for m in voice_models}
+
+            sel_frame = ctk.CTkFrame(voice_box, fg_color="transparent")
+            sel_frame.pack(fill="x", padx=12, pady=(0, 10))
+
+            ctk.CTkLabel(
+                sel_frame,
+                text="SES MODELI (ASTRA):",
+                text_color=MUTED
+            ).pack(side="left", padx=(0, 8))
+
+            current_label = next(
+                (m["label"] for m in voice_models if m["id"] == current_voice),
+                voice_models[0]["label"],
+            )
+            voice_var = ctk.StringVar(value=current_label)
+
+            def on_voice_change(choice):
+                vid = voice_id_by_label.get(choice)
+                if vid:
+                    voice_config.set_voice_id(vid)
+
+            voice_combo = ctk.CTkComboBox(
+                sel_frame,
+                values=voice_labels,
+                variable=voice_var,
+                command=on_voice_change,
+                width=220,
+            )
+            voice_combo.pack(side="left", padx=6, pady=4)
+        except Exception:
+            pass
+
         for action in win.voice_assistant.next_actions():
             ctk.CTkLabel(
                 voice_box,

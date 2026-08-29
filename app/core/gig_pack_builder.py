@@ -4,16 +4,17 @@ from datetime import datetime
 
 from app.ai.show_director import ShowDirector
 from app.core.export_center import ExportCenter
+from app.core.paths import get_exports_dir
 from app.core.rekordbox_bridge import RekordboxBridge
 
 
 class GigPackBuilder:
 
-    def __init__(self, output_folder="DJ_EXPORTS"):
+    def __init__(self, output_folder=None):
 
-        self.output_folder = output_folder
-        self.exporter = ExportCenter(output_folder)
-        self.rekordbox = RekordboxBridge(output_folder)
+        self.output_folder = output_folder or str(get_exports_dir())
+        self.exporter = ExportCenter(self.output_folder)
+        self.rekordbox = RekordboxBridge(self.output_folder)
         self.show_director = ShowDirector()
 
     def build(self, tracks, style="AFRO HOUSE", hours=4, name="dj_ai_gig_pack"):

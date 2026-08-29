@@ -4,14 +4,15 @@ import shutil
 from datetime import datetime
 
 from app.core.export_center import ExportCenter
+from app.core.paths import get_exports_dir
 
 
 class RekordboxBridge:
 
-    def __init__(self, output_folder="DJ_EXPORTS"):
+    def __init__(self, output_folder=None):
 
-        self.output_folder = output_folder
-        self.exporter = ExportCenter(output_folder)
+        self.output_folder = output_folder or str(get_exports_dir())
+        self.exporter = ExportCenter(self.output_folder)
 
     def status(self):
 

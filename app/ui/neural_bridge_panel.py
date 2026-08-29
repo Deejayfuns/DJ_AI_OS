@@ -18,6 +18,7 @@ from tkinter import filedialog
 
 import customtkinter as ctk
 
+from app.core.paths import get_exports_dir
 from app.ui.theme import (
     BG, SURFACE, SURFACE_RAISED, BORDER, RED, RED_HOVER,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM, BLUE_BRIGHT,
@@ -278,7 +279,8 @@ class NeuralBridgePanel(ctk.CTkFrame):
         if self.bridge.audio is None:
             self._set_status("önce köprüyü çal (render olması lazım)")
             return
-        out_dir = os.path.join("DJ_EXPORTS", "neural_bridge")
+        exports_dir = str(get_exports_dir())
+        out_dir = os.path.join(exports_dir, "neural_bridge")
         os.makedirs(out_dir, exist_ok=True)
         stem = (f"{os.path.splitext(self.bridge.name_a)[0]}_to_"
                 f"{os.path.splitext(self.bridge.name_b)[0]}")

@@ -3,6 +3,8 @@ import re
 import json
 from collections import Counter
 
+from app.core.paths import get_exports_dir
+
 
 class ArchiveAuditor:
 
@@ -170,8 +172,10 @@ class ArchiveAuditor:
 
         return sorted(groups, key=lambda group: group["count"], reverse=True)
 
-    def write_report(self, report, output_folder="DJ_EXPORTS"):
+    def write_report(self, report, output_folder=None):
 
+        if output_folder is None:
+            output_folder = str(get_exports_dir())
         os.makedirs(output_folder, exist_ok=True)
         path = os.path.join(output_folder, "archive_audit_latest.json")
 

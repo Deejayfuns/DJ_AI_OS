@@ -58,6 +58,53 @@ class AccountView(ViewBase):
             command=win.open_customer_portal
         ).pack(side="left", padx=8, pady=12)
 
+        # --- OFFLINE LICENSE LOAD ---
+        offline_frame = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=8)
+        offline_frame.pack(fill="x", pady=(8, 12))
+
+        ctk.CTkLabel(
+            offline_frame,
+            text="OFFLINE LİSANS YÜKLE",
+            font=("Segoe UI", 12, "bold"),
+            text_color=ACCENT
+        ).pack(anchor="w", padx=12, pady=(8, 4))
+
+        ctk.CTkLabel(
+            offline_frame,
+            text="Vendor'dan aldığınız imzalı license.key (JSON) içeriğini yapıştırın veya dosya seçin.",
+            text_color=MUTED,
+            wraplength=800
+        ).pack(anchor="w", padx=12, pady=(0, 8))
+
+        win.offline_license_text = ctk.CTkTextbox(offline_frame, height=80, width=700)
+        win.offline_license_text.pack(anchor="w", padx=12, pady=(0, 8))
+
+        btn_row = ctk.CTkFrame(offline_frame, fg_color="transparent")
+        btn_row.pack(anchor="w", padx=12, pady=(0, 10))
+
+        ctk.CTkButton(
+            btn_row,
+            text="DOSYA SEÇ",
+            width=120,
+            command=lambda: win.load_offline_license_from_file()
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            btn_row,
+            text="YÜKLE",
+            width=100,
+            command=lambda: win.load_offline_license_from_text(
+                win.offline_license_text.get("1.0", "end").strip()
+            )
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            btn_row,
+            text="TEMİZLE",
+            width=80,
+            command=lambda: win.offline_license_text.delete("1.0", "end")
+        ).pack(side="left")
+
         ctk.CTkLabel(
             top,
             text=f"PLAN: {plan.get('plan')} | LICENSED: {'YES' if plan.get('licensed') else 'NO'}",

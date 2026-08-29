@@ -42,6 +42,18 @@ class VoiceRuntime:
         return "tr" if self.language == "tr" else "en"
 
     def get_edge_voice(self):
+        """Return the user-selected edge-tts voice id, falling back to
+        language-appropriate default."""
+        try:
+            from app.core import voice_config
+            vid = voice_config.get_voice_id()
+            model = voice_config.get_voice_model(vid)
+            # If the selected voice matches current language, use it
+            if model["lang"] == self.language:
+                return vid
+        except Exception:
+            pass
+        # Fallback: language-appropriate default
         if self.language == "en":
             return "en-US-JennyNeural"
         return "tr-TR-AhmetNeural"

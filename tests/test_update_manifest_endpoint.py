@@ -128,14 +128,14 @@ def test_update_manifest_endpoint_404_when_not_configured(client, monkeypatch):
 
 
 def test_update_manifest_version_greater_than_current():
-    """Manifest version 0.2.0 > current 0.1.0 for update detection."""
+    """Manifest version 0.3.0 > current 0.2.0 for update detection."""
     from app.config.version import APP_VERSION
     from app.cloud.update_engine import UpdateEngine
 
     engine = UpdateEngine()
-    # Current version is 0.1.0 from app/config/version.py
-    assert engine._version_gt("0.2.0", APP_VERSION)
-    assert not engine._version_gt(APP_VERSION, "0.2.0")
+    # Current version is 0.2.0 from app/config/version.py
+    assert engine._version_gt("0.3.0", APP_VERSION)
+    assert not engine._version_gt(APP_VERSION, "0.3.0")
 
 
 def test_update_manifest_min_client_version_check():

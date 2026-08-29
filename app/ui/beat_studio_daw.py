@@ -24,6 +24,7 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
+from app.core.paths import get_exports_dir
 from app.ui.theme import (
     BG, SURFACE, SURFACE_RAISED, BORDER, BORDER_LIGHT, RED, RED_HOVER,
     GREEN, GREEN_DIM, AMBER, BLUE_BRIGHT, TEXT_PRIMARY, TEXT_SECONDARY,
@@ -39,8 +40,8 @@ try:
 except Exception:
     HAS_AUDIO = False
 
-PROJECTS_DIR = os.path.join("DJ_EXPORTS", "projects")
-STEMS_DIR = os.path.join("DJ_EXPORTS", "daw_stems")
+PROJECTS_DIR = os.path.join(str(get_exports_dir()), "projects")
+STEMS_DIR = os.path.join(str(get_exports_dir()), "daw_stems")
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 PIANO_TOP = 84   # C6
@@ -562,7 +563,7 @@ class DAWPanel(ctk.CTkFrame):
 
     def _export(self):
         path = filedialog.asksaveasfilename(
-            initialdir="DJ_EXPORTS", defaultextension=".wav",
+            initialdir=str(get_exports_dir()), defaultextension=".wav",
             initialfile=f"{self.project.name}_mix.wav",
             filetypes=[("WAV", "*.wav")])
         if not path:

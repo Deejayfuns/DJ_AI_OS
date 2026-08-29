@@ -82,6 +82,29 @@ def build(onefile=False):
         sys.exit(1)
 
 
+def sign_exe(exe_path: Path) -> bool:
+    """Sign the built EXE using the signing helper."""
+    sign_helper = PROJECT_ROOT / "tools" / "ci" / "sign_exe.py"
+    if not sign_helper.exists():
+        print(f"ERROR: Signing helper not found: {sign_helper}")
+        return False
+
+    cmd = [sys.executable, str(sign_helper), "sign", str(exe_path)]
+    print(f"Signing EXE: {exe_path}")
+    print(f"Command: {' '.join(cmd)}")
+
+    try:
+        result = subprocess.run(cmd, cwd=PROJECT_ROOT, check=False)
+        if result.returncode != 0:
+            print(f"ERROR: Signing failed (exit {result.returncode})")
+            return False
+        print("Signing successful")
+        return True
+    except Exception as e:
+        print(f"ERROR: Signing invocation failed: {e}")
+        return False
+
+
 def create_installer():
     """Create Windows installer with Inno Setup (if installed)."""
     version = get_version()
@@ -149,7 +172,7 @@ Filename: "{{app}}\\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#MyAp
 
     try:
         subprocess.run([iscc, str(iss_path)], cwd=PROJECT_ROOT, check=True)
-        print(f"✅ Installer created: {PROJECT_ROOT / 'dist' / f'DJ_AI_OS_v{version}_Setup.exe'}")
+        print(f"[OK] Installer created: {PROJECT_ROOT / 'dist' / f'DJ_AI_OS_v{version}_Setup.exe'}")
     except subprocess.CalledProcessError as e:
         print(f"⚠️  Installer build failed (exit {e.returncode})")
 
@@ -158,6 +181,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build DJ AI OS Windows executable")
     parser.add_argument("--onefile", action="store_true", help="Single EXE (slower startup)")
     parser.add_argument("--installer", action="store_true", help="Also build Inno Setup installer")
+    parser.add_argument("--sign", action="store_true", help="Sign EXE with Authenticode (requires CODESIGN_PFX_BASE64)")
     parser.add_argument("--clean", action="store_true", help="Clean artifacts only")
     args = parser.parse_args()
 
@@ -166,6 +190,20 @@ if __name__ == "__main__":
         sys.exit(0)
 
     build(onefile=args.onefile)
+
+    if args.sign:
+        version = get_version()
+        if args.onefile:
+            exe_path = PROJECT_ROOT / "dist" / f"DJ_AI_OS_v{version}.exe"
+        else:
+            exe_path = PROJECT_ROOT / "dist" / "DJ_AI_OS" / "DJ_AI_OS.exe"
+
+        if not exe_path.exists():
+            print(f"ERROR: Built EXE not found at {exe_path}")
+            sys.exit(1)
+
+        if not sign_exe(exe_path):
+            sys.exit(1)
 
     if args.installer:
         create_installer()

@@ -10,6 +10,8 @@ import struct
 import wave
 from datetime import datetime
 
+from app.core.paths import get_remix_lab_dir
+
 
 class RemixLab:
 
@@ -86,7 +88,7 @@ class RemixLab:
             "demucs_mode": self.demucs_mode(demucs_info),
             "ffmpeg_available": bool(ffmpeg_command),
             "ffmpeg_command": ffmpeg_command or "",
-            "output_folder": os.path.abspath("DJ_REMIX_LAB"),
+            "output_folder": str(get_remix_lab_dir()),
             "install_hint": (
                 "Python kurulduktan sonra: py -m pip install -U demucs soundfile. "
                 "FFmpeg icin: winget install Gyan.FFmpeg veya manuel kurulum."
@@ -232,8 +234,10 @@ class RemixLab:
             "next_action": readiness["next_action"],
         }
 
-    def export_blueprint(self, blueprint, readiness, output_folder="DJ_REMIX_LAB"):
+    def export_blueprint(self, blueprint, readiness, output_folder=None):
 
+        if output_folder is None:
+            output_folder = str(get_remix_lab_dir())
         os.makedirs(output_folder, exist_ok=True)
         base = self.safe_name(
             f"{blueprint['track']}_{blueprint['target_style']}_remix_plan"
@@ -261,10 +265,12 @@ class RemixLab:
         self,
         track,
         target_style="AFRO HOUSE",
-        output_folder="DJ_REMIX_LAB",
+        output_folder=None,
         duration_seconds=96
     ):
 
+        if output_folder is None:
+            output_folder = str(get_remix_lab_dir())
         blueprint = self.build_remix_blueprint(track, target_style)
         os.makedirs(output_folder, exist_ok=True)
         base = self.safe_name(
@@ -499,7 +505,10 @@ class RemixLab:
             "fx": "bar-aware riser",
         }
 
-    def separate_vocals(self, track, output_folder="DJ_REMIX_LAB"):
+    def separate_vocals(self, track, output_folder=None):
+
+        if output_folder is None:
+            output_folder = str(get_remix_lab_dir())
 
         source = track.get("path") or track.get("id")
 

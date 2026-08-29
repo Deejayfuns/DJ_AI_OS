@@ -70,7 +70,7 @@ def test_manifest(test_keys, test_artifacts_dir):
     artifacts_dir, content_a, content_b = test_artifacts_dir
 
     manifest = {
-        "version": "0.2.0",
+        "version": "0.3.0",
         "min_client_version": APP_VERSION,
         "released_at": "2026-08-14T00:00:00Z",
         "critical": False,
@@ -79,14 +79,14 @@ def test_manifest(test_keys, test_artifacts_dir):
         "modules": [
             {
                 "name": MODULE_A,
-                "version": "0.2.0",
+                "version": "0.3.0",
                 "sha256": hashlib.sha256(content_a).hexdigest(),
                 "size": len(content_a),
                 "hot_reload": False,
             },
             {
                 "name": MODULE_B,
-                "version": "0.2.0",
+                "version": "0.3.0",
                 "sha256": hashlib.sha256(content_b).hexdigest(),
                 "size": len(content_b),
                 "hot_reload": False,
@@ -199,7 +199,7 @@ def test_e2e_server_manifest_to_apply(tmp_path, test_server, test_keys):
         result = engine.check_for_updates({"entitlements": {"updates_active": True}})
 
         assert result["available"] is True, f"Update should be available: {result}"
-        assert result["latest"] == "0.2.0"
+        assert result["latest"] == "0.3.0"
         assert result["current"] == APP_VERSION
         assert "manifest" in result
         assert len(result["manifest"]["modules"]) == 2
@@ -226,7 +226,7 @@ def test_e2e_server_manifest_to_apply(tmp_path, test_server, test_keys):
         local_manifest_path = Path(engine.update_dir) / "manifest.json"
         assert local_manifest_path.exists()
         local_manifest = json.loads(local_manifest_path.read_text(encoding="utf-8"))
-        assert local_manifest["version"] == "0.2.0"
+        assert local_manifest["version"] == "0.3.0"
         assert local_manifest["signature"] == manifest["signature"]
 
     finally:

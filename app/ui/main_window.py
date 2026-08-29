@@ -115,6 +115,13 @@ def _get_ai_instance(name, *args, **kwargs):
     return _AI_INSTANCE_CACHE[name]
 
 
+# Views that disable the persistent HUD overlay (no particles/scanlines/brackets/telemetry)
+_HUD_DISABLED_VIEWS = frozenset({
+    "archive_guardian",  # Archive Guardian
+    "dashboard",         # Archive Control Dashboard
+})
+
+
 class MainWindow(ctk.CTk):
 
     def __init__(self, on_boot=None):
@@ -177,9 +184,10 @@ class MainWindow(ctk.CTk):
         self.scanner = AudioScanner()
         self.archive_brain = ArchiveBrain()
         self.archive_auditor = ArchiveAuditor()
-        self.archive_reconciler = ArchiveReconciler("DJ_LIBRARY_OUTPUT")
+        from app.core.paths import get_library_output_dir
+        self.archive_reconciler = ArchiveReconciler(str(get_library_output_dir()))
         self.doctor = LibraryDoctor()
-        self.organizer = Organizer("DJ_LIBRARY_OUTPUT")
+        self.organizer = Organizer(str(get_library_output_dir()))
         self.export_center = ExportCenter()
         self.rekordbox_bridge = RekordboxBridge()
         self.gig_pack_builder = GigPackBuilder()
@@ -222,7 +230,8 @@ class MainWindow(ctk.CTk):
         self.ai_messages = []
         self.duplicate_reviews = []
         self.total_archived = len(self.archived_ids)
-        self.archive_output_folder = os.path.abspath("DJ_LIBRARY_OUTPUT")
+        from app.core.paths import get_library_output_dir
+        self.archive_output_folder = str(get_library_output_dir())
         boot_phase("KÜTÜPHANE HAZIR — KABİN ARAYÜZÜ KURULUYOR")
 
         # ================= STATE =================
@@ -431,6 +440,16 @@ class MainWindow(ctk.CTk):
         if self._shutting_down:
             return
         self._shutting_down = True
+
+        # Stop HUD animation loop to avoid dangling after() callbacks.
+        pending = getattr(self, "_hud_after_id", None)
+        if pending is not None:
+            try:
+                self.after_cancel(pending)
+            except Exception:
+                pass
+            self._hud_after_id = None
+        self._hud_running = False
 
         # signal background threads to stop cleanly
         self.astra_listener_running = False
@@ -645,6 +664,49 @@ class MainWindow(ctk.CTk):
     # =====================================================
     # PERSISTENT HUD — live telemetry frame (runs forever)
     # =====================================================
+    def _hud_enabled_for_current_view(self):
+        """Single central gate: the HUD overlay is shown on every view
+        except those flagged in _HUD_DISABLED_VIEWS (Archive Control
+        Dashboard / Archive Guardian)."""
+        view = getattr(self, "current_view", "dashboard")
+        return view not in _HUD_DISABLED_VIEWS
+
+    def _hud_apply_visibility(self):
+        """Show/hide the HUD canvas + manage the animation loop lifecycle.
+
+        - HUD disabled  -> canvas hidden, animation loop NOT re-scheduled.
+        - HUD enabled   -> canvas shown, exactly one animation loop running.
+
+        Safe against duplicate loops: cancels any pending after() job before
+        (re)arming, so repeated view switches never stack callbacks."""
+        cv = getattr(self, "_hud_canvas", None)
+        if cv is None or not cv.winfo_exists():
+            return
+
+        # Cancel any pending frame first — prevents duplicate loops.
+        pending = getattr(self, "_hud_after_id", None)
+        if pending is not None:
+            try:
+                self.after_cancel(pending)
+            except Exception:
+                pass
+            self._hud_after_id = None
+
+        if self._hud_enabled_for_current_view():
+            cv.place(relx=0, rely=0, relwidth=1, relheight=1)
+            # NOTE: intentionally do NOT raise the HUD canvas above view content.
+            # The canvas is created before `self.content` (creation-order z-order),
+            # so it stays BELOW the active view UI. Raising it (cv.tkraise) made
+            # the opaque canvas cover every HUD-enabled view's real UI.
+            if not getattr(self, "_hud_running", False):
+                self._hud_running = True
+                self._hud_frame = 0
+                self._animate_hud()
+        else:
+            cv.place_forget()
+            cv.delete("hud")
+            self._hud_running = False
+
     def _hud_telemetry(self):
         """Throttled psutil telemetry (CPU/MEM/NET) for the HUD strip.
 
@@ -688,6 +750,14 @@ class MainWindow(ctk.CTk):
             w = max(cv.winfo_width(), 100)
             h = max(cv.winfo_height(), 100)
         except Exception:
+            return
+
+        # HUD disabled for this view: stop drawing + stop the loop.
+        if not self._hud_enabled_for_current_view():
+            cv.delete("hud")
+            cv.place_forget()
+            self._hud_running = False
+            self._hud_after_id = None
             return
 
         f = self._hud_frame + 1
@@ -950,7 +1020,7 @@ class MainWindow(ctk.CTk):
         except Exception:
             pass
 
-        cv.after(50, self._animate_hud)
+        self._hud_after_id = cv.after(50, self._animate_hud)
 
     # =====================================================
     # VIEW TRANSITION — HUD light sweep on view change
@@ -1185,7 +1255,10 @@ class MainWindow(ctk.CTk):
         self._hud_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
         self._hud_frame = 0
         self._hud_scanline_y = 0
-        self._animate_hud()
+        self._hud_after_id = None
+        self._hud_running = False
+        # Initial visibility based on default view ("dashboard" = disabled)
+        self._hud_apply_visibility()
 
         # =====================================================
         # HEADER — Pro DJ style (clean, single-line)
@@ -1638,6 +1711,8 @@ class MainWindow(ctk.CTk):
         self.current_view = view
         if view != "astra_chat":
             self.astra_active = False
+        # Update HUD visibility for the new view (pauses/resumes animation loop)
+        self._hud_apply_visibility()
         self.clear_content()
 
         builders = {
@@ -4953,9 +5028,10 @@ class MainWindow(ctk.CTk):
             self.set_status("FL MASTERING: Once bir parca sec.")
             return
 
+        from app.core.paths import get_remix_lab_dir
         result = self.fl_studio_bridge.prepare_mastering_pack(
             self.selected_track,
-            output_folder="DJ_REMIX_LAB"
+            output_folder=str(get_remix_lab_dir())
         )
         self.set_status(f"FL MASTERING PACK HAZIR: {result['pack_folder']}")
         self.log(f"FL Studio mastering notes: {result['notes_path']}")
@@ -5465,8 +5541,8 @@ class MainWindow(ctk.CTk):
         self.populate_table(source)
 
     def _populate_trends_tab(self, parent):
-        """Populate trends tab."""
-        ctk.CTkLabel(parent, text="Trends tab - implement populate_trends_tab", font=F_BODY).pack(padx=20, pady=20)
+        """Populate trends tab with real Global Trends radar data."""
+        self.populate_trend_radar(parent)
 
     def export_show_manifest(self):
 
@@ -5476,8 +5552,9 @@ class MainWindow(ctk.CTk):
             return
 
         import json
-        os.makedirs("DJ_EXPORTS", exist_ok=True)
-        manifest_path = os.path.join("DJ_EXPORTS", "show_manifest.json")
+        from app.core.paths import get_exports_dir
+        exports_dir = get_exports_dir()
+        manifest_path = exports_dir / "show_manifest.json"
 
         manifest = {
             "version": "1.0",
@@ -6001,6 +6078,82 @@ class MainWindow(ctk.CTk):
         )
 
     # -------------------------
+    # OFFLINE LICENSE LOAD
+    # -------------------------
+
+    def load_offline_license_from_file(self):
+        """File picker → JSON içeriğini oku → doğrula → kaydet."""
+        try:
+            from tkinter import filedialog
+            path = filedialog.askopenfilename(
+                title="Lisans dosyasını seç (license.key JSON)",
+                filetypes=[("JSON", "*.json"), ("Key", "*.key"), ("All", "*.*")]
+            )
+            if not path:
+                return
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            self._apply_offline_license(content)
+        except Exception as e:
+            self.set_status(f"OFFLINE LICENSE LOAD ERROR: {e}")
+
+    def load_offline_license_from_text(self, json_text):
+        """Account panelindeki textbox'tan JSON al → doğrula → kaydet."""
+        if not json_text:
+            self.set_status("OFFLINE LICENSE: boş içerik")
+            return
+        self._apply_offline_license(json_text)
+
+    def _apply_offline_license(self, json_text):
+        """Ortak offline lisans uygulama: parse → schema → signature → machine → expiry → save."""
+        import json
+        from app.license.license_schema import LicenseSchema
+        from app.license import signature as sig
+
+        try:
+            data = json.loads(json_text)
+        except json.JSONDecodeError as e:
+            self.set_status(f"OFFLINE LICENSE: geçersiz JSON — {e}")
+            return
+
+        # Structure validation
+        schema = LicenseSchema()
+        if not schema.validate_structure(data):
+            self.set_status("OFFLINE LICENSE: eksik alanlar (machine_id, plan, expiry, ...)")
+            return
+
+        # Signature verification (gömülü vendor public key)
+        if not sig.verify(data, data.get("signature", "")):
+            self.set_status("OFFLINE LICENSE: imza doğrulaması başarısız (INVALID SIGNATURE)")
+            return
+
+        # Machine check
+        if data.get("machine_id") != self.license.machine.generate():
+            self.set_status("OFFLINE LICENSE: makine ID uyuşmazlığı (WRONG MACHINE)")
+            return
+
+        # Expiry check
+        from datetime import datetime
+        try:
+            expiry = datetime.strptime(data.get("expiry", ""), "%Y-%m-%d")
+            if datetime.now() > expiry:
+                self.set_status("OFFLINE LICENSE: lisans süresi dolmuş (EXPIRED)")
+                return
+        except (ValueError, TypeError):
+            self.set_status("OFFLINE LICENSE: geçersiz expiry formatı")
+            return
+
+        # All checks passed → save
+        try:
+            new_plan = self.license.save_license(data)
+            self.plan = new_plan
+            self.set_status(f"OFFLINE LICENSE YÜKLENDİ: {new_plan.get('plan')} ✓")
+            # Refresh account view to show new entitlements
+            self.set_view("account")
+        except Exception as e:
+            self.set_status(f"OFFLINE LICENSE SAVE ERROR: {e}")
+
+    # -------------------------
     # UPDATE ENGINE (lisanslı kullanıcılar)
     # -------------------------
 
@@ -6268,17 +6421,17 @@ class MainWindow(ctk.CTk):
         if not hasattr(self, '_beat_studio') or not self._beat_studio.last_result:
             self.set_status("Once bir beat olustur.")
             return
-        import os
-        os.makedirs("DJ_EXPORTS", exist_ok=True)
+        from app.core.paths import get_exports_dir
+        exports_dir = get_exports_dir()
         result = self._beat_studio.last_result
         if mode == "stems":
-            path = self._beat_studio.export_stems(result, "DJ_EXPORTS/stems")
+            path = self._beat_studio.export_stems(result, str(exports_dir / "stems"))
             self.set_status(f"STEMS EXPORTED: {list(path.keys())}")
         elif mode == "pro":
-            path = self._beat_studio.export_pro_wav(result, f"DJ_EXPORTS/{result['genre']}_{result['bpm']}bpm_pro.wav", bit_depth=24)
+            path = self._beat_studio.export_pro_wav(result, str(exports_dir / f"{result['genre']}_{result['bpm']}bpm_pro.wav"), bit_depth=24)
             self.set_status(f"PRO WAV EXPORTED: {path}")
         else:
-            path = self._beat_studio.export_mix(result, f"DJ_EXPORTS/{result['genre']}_{result['bpm']}bpm_mix.wav")
+            path = self._beat_studio.export_mix(result, str(exports_dir / f"{result['genre']}_{result['bpm']}bpm_mix.wav"))
             self.set_status(f"MIX EXPORTED: {path}")
 
     def _update_stats_bar(self):

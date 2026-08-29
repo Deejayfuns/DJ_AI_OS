@@ -262,6 +262,9 @@ def test_demo_license_limit():
     manager = LicenseManager()
     # Kaynak ağacı + açık dev.flag/env OLMADAN → DEMO (güvenli varsayılan).
     # owner_dev_mode artık bayraksız tetiklenmez; demo/limit yolu test edilir.
+    # Açıkça yok bir lisans dosyası göster (repo kökündeki license.key'i
+    # devralmamak için) — DEMO yolu izole şekilde test edilir.
+    manager.license_file = os.path.join(tempfile.gettempdir(), "demo_limit_nonexistent.json")
     manager.owner_dev_mode = False
 
     assert manager.get_plan()["plan"] == "DEMO"

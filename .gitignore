@@ -73,3 +73,40 @@ build_log2.txt
 nul
 update_manifest.json
 update_manifest_signed.json
+
+# Signing artifacts
+signing/
+*.pfx
+*.p12
+*cert*.pem
+
+# Release artifacts
+releases/
+
+# Runtime logs
+boot*.log
+hud_test*.log
+
+# Test artifacts
+test_license.json
+test_tts_output/
+test_tts_phonetic/
+
+# Secrets / credentials
+license_enterprise_customer.key
+
+# Personal / machine-specific
+.env.production.example
+
+# Internal docs / plans
+AUDIT_v0.2.md
+P0-1_CODE_SIGNING_AUDIT.md
+PHASE_3_6_IMPLEMENTATION_PLAN.md
+
+# Media files
+*.mp4
+*.mp3
+*.wav
+*.flac
+*.m4a
+*.ogg

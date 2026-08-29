@@ -25,6 +25,8 @@ API:
 import os
 import threading
 
+from app.core.paths import get_song_vault_dir
+
 try:
     import yt_dlp
     HAS_YTDLP = True
@@ -43,7 +45,7 @@ class SongVault:
     """Search + download engine backed by yt-dlp."""
 
     def __init__(self, out_dir=None, fmt="mp3_320"):
-        self.out_dir = out_dir or os.path.join(os.getcwd(), "DJ_SONG_VAULT")
+        self.out_dir = out_dir or str(get_song_vault_dir())
         self.fmt = fmt if fmt in FORMAT_SPECS else "mp3_320"
         self.history = []
         self._lock = threading.Lock()
@@ -101,6 +103,7 @@ class SongVault:
             "noprogress": True,
             "ignoreerrors": False,
             "concurrent_fragment_downloads": 4,
+            "extractor_args": {"youtube": {"player_client": ["android"], "skip": ["webpage"]}},
         }
         if not skip_download:
             post = [{
@@ -124,7 +127,13 @@ class SongVault:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info("ytsearch1:%s" % query, download=False)
         entries = info.get("entries") or [info]
-        return entries[0] if entries else None
+        if not entries:
+            return None
+        # Skip playlist objects with no actual video entries
+        first = entries[0]
+        if first.get("_type") == "playlist" and not first.get("entries"):
+            return None
+        return first
 
     @staticmethod
     def _final_path(ydl, video, ext):

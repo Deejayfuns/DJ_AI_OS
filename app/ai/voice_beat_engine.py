@@ -18,6 +18,7 @@ from typing import Dict, Any, Optional, List
 
 from app.ai.beat_studio import BeatStudio
 from app.ai.library_ai import LibraryAI
+from app.core.paths import get_exports_dir
 from app.core.stem_separator import StemSeparator
 
 
@@ -34,7 +35,7 @@ class VoiceBeatEngine:
         self.last_beat = None
         self.last_separation = None
         self.last_library = None
-        self.output_dir = "DJ_EXPORTS"
+        self.output_dir = str(get_exports_dir())
 
     def load_library(self, tracks):
         """Load track library for library AI features."""
@@ -191,8 +192,9 @@ class VoiceBeatEngine:
         import glob
         search_patterns = ["*.mp3", "*.wav", "*.flac", "*.m4a"]
         recent_files = []
+        exports_dir = str(get_exports_dir())
         for pattern in search_patterns:
-            recent_files.extend(glob.glob(os.path.join("DJ_EXPORTS", pattern)))
+            recent_files.extend(glob.glob(os.path.join(exports_dir, pattern)))
             recent_files.extend(glob.glob(pattern))
 
         if not recent_files:

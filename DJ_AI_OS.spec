@@ -23,10 +23,13 @@ data_root = project_root / 'data'
 if data_root.exists():
     for item in data_root.rglob('*'):
         if item.is_file():
-            # Skip MP3, WAV, FLAC, M4A, DB, large JSON
+            # Skip MP3, WAV, FLAC, M4A, OGG, DB, large JSON
             if item.suffix.lower() in ('.mp3', '.wav', '.flac', '.m4a', '.ogg', '.db', '.json'):
                 if item.stat().st_size > 1024 * 100:  # Skip files >100KB
                     continue
+            # Skip database files entirely (runtime data, not ship-with-app)
+            if item.suffix.lower() == '.db':
+                continue
             # Skip DJ_LIBRARY_OUTPUT, DJ_EXPORTS, etc.
             rel = str(item.relative_to(data_root))
             if any(rel.startswith(p) for p in ('DJ_LIBRARY', 'DJ_EXPORT', 'DJ_REMIX', 'DJ_CLOUD')):
@@ -101,6 +104,7 @@ hiddenimports = [
     'app.ai.voice_assistant',
     'app.ai.camera_assistant',
     'app.ai.jarvis_assistant',
+    'app.ui.song_vault_panel',
     # Serialization
     'sqlite3',
     # Optional backends (graceful if missing)
