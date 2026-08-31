@@ -1,0 +1,74 @@
+{
+  "version": "0.2.1",
+  "min_client_version": "0.1.0",
+  "released_at": null,
+  "critical": false,
+  "changelog": "Release 0.2.1",
+  "download_url": "https://Deejayfuns.github.io/DJ_AI_OS/updates",
+  "modules": [
+    {
+      "name": "app/config/version.py",
+      "version": "0.2.1",
+      "sha256": "13d3db28e62661cba7a9586863f63080224d2c6208425a2c9bc447e0c1d9f5d0",
+      "size": 690,
+      "hot_reload": false
+    },
+    {
+      "name": "app/config/vendor_public_key.py",
+      "version": "0.2.1",
+      "sha256": "2ca7df98e8fd81dfa6d1f43c93c56b9480c2d1c8a05a6e56a4728beecff14209",
+      "size": 687,
+      "hot_reload": false
+    },
+    {
+      "name": "app/license/signature.py",
+      "version": "0.2.1",
+      "sha256": "05fc9fe9a1b0281c6b6625f59da95f17a72c42045e47be8206f727fd419889d8",
+      "size": 3855,
+      "hot_reload": false
+    },
+    {
+      "name": "app/license/license_manager.py",
+      "version": "0.2.1",
+      "sha256": "726c68aca30768d76534fe74fb89bdfdd21d793a17940bbaacd29c21634642e5",
+      "size": 5456,
+      "hot_reload": false
+    },
+    {
+      "name": "app/license/license_schema.py",
+      "version": "0.2.1",
+      "sha256": "b73cab76b9b63d8506d4897b0f78285282fa856445875194779db98eb94f0428",
+      "size": 412,
+      "hot_reload": false
+    },
+    {
+      "name": "app/license/entitlements.py",
+      "version": "0.2.1",
+      "sha256": "8501eb941498927c512d53f27d670df4d35d34c531db7da9d028d96d177995ff",
+      "size": 5581,
+      "hot_reload": false
+    },
+    {
+      "name": "app/license/machine_id.py",
+      "version": "0.2.1",
+      "sha256": "05f71a8859b21c515e081a9c6a0706daff2b727fea13c55d74187fb72545c357",
+      "size": 379,
+      "hot_reload": false
+    },
+    {
+      "name": "app/cloud/update_engine.py",
+      "version": "0.2.1",
+      "sha256": "a4eac77d65e7afbd7db5b5a768d06246c58d44eba98469b07aa316765b16fd80",
+      "size": 18185,
+      "hot_reload": false
+    },
+    {
+      "name": "app/cloud/commercial_api.py",
+      "version": "0.2.1",
+      "sha256": "5325888775c8460388788ce68cf038f3224fcedc6f857b43a5f8f1b4c5d929a8",
+      "size": 6144,
+      "hot_reload": false
+    }
+  ],
+  "signature": "fe43d7484cca6c1f2f3d794e24c86d256f6d7fc35f1c598a3f2b04c43bcb2921ca2ec9e6876e23d671d35b9df381eb4f090527ee8d9244bc3f06f43e98480e05"
+}
