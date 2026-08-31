@@ -1,0 +1,136 @@
+name: Build & Deploy Update Artifacts
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  GITHUB_PAGES_REPO: ${{ github.repository }}
+  GITHUB_PAGES_USER: ${{ github.repository_owner }}
+
+jobs:
+  build-manifest:
+    name: Build Signed Manifest & Modules
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set-version.outputs.version }}
+      download_url: ${{ steps.set-version.outputs.download_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for version detection
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,server]"
+          pip install pyinstaller
+
+      - name: Determine version from tag
+        id: set-version
+        run: |
+          TAG=${GITHUB_REF_NAME}
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # GitHub Pages URL pattern: https://<user>.github.io/<repo>/updates
+          DOWNLOAD_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/updates"
+          echo "download_url=$DOWNLOAD_URL" >> $GITHUB_OUTPUT
+          echo "Building manifest for version $VERSION with download_url=$DOWNLOAD_URL"
+
+      - name: Build signed manifest & module artifacts
+        run: |
+          python tools/build_manifest.py \
+            --version ${{ steps.set-version.outputs.version }} \
+            --download-url ${{ steps.set-version.outputs.download_url }} \
+            --changelog "Release ${{ steps.set-version.outputs.version }}"
+
+      - name: Verify manifest signature
+        run: |
+          python -c "
+          import json
+          from app.license import signature as sig
+          with open('updates/manifest.json') as f:
+              m = json.load(f)
+          ok = sig.verify(m, m.get('signature', ''))
+          print(f'Signature valid: {ok}')
+          assert ok, 'Manifest signature verification failed!'
+          print('Manifest version:', m['version'])
+          print('Modules:', len(m['modules']))
+          print('Download URL:', m['download_url'])
+          "
+
+      - name: Upload updates folder as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: updates-folder
+          path: updates/
+          retention-days: 30
+
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    needs: build-manifest
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download updates artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: updates-folder
+          path: updates/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: updates/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Optional: Also create GitHub Release with manifest for backup/visibility
+  create-release:
+    name: Create GitHub Release
+    needs: build-manifest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download updates artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: updates-folder
+          path: updates/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: DJ AI OS ${{ github.ref_name }}
+          body: |
+            **Update Artifacts for ${{ github.ref_name }}**
+
+            - Manifest: `updates/manifest.json`
+            - Modules: `updates/modules/`
+
+            Configure `DJ_AI_OS_UPDATE_BASE_URL=https://${{ github.repository_owner }}.github.io/${{ github.repository }}/updates` on Render.
+          draft: false
+          prerelease: false
+          files: |
+            updates/manifest.json
+            updates/modules/**/*
