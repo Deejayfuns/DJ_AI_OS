@@ -54,7 +54,7 @@ def test_alembic_heads_single():
     """Migration chain has exactly one head."""
     cfg = _alembic_config()
     heads = ScriptDirectory.from_config(cfg).get_heads()
-    assert heads == ["0001_initial"], f"Expected single head, got: {heads}"
+    assert heads == ["0002_company_revoked_deactivated"], f"Expected single head, got: {heads}"
 
 
 def test_alembic_upgrade_head_creates_all_tables():
@@ -168,6 +168,6 @@ def test_current_revision_is_head():
         with engine.connect() as conn:
             row = conn.execute(text("SELECT version_num FROM alembic_version")).fetchone()
             assert row is not None, "alembic_version row missing"
-            assert row[0] == "0001_initial", f"Current revision not head: {row[0]}"
+            assert row[0] == "0002_company_revoked_deactivated", f"Current revision not head: {row[0]}"
     finally:
         engine.dispose()
