@@ -67,7 +67,6 @@ boot_selftest_stdout.log
 
 # Build artifacts / output
 DJ_SONG_VAULT/
-admin/
 build_log.txt
 build_log2.txt
 nul

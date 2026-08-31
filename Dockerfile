@@ -33,4 +33,5 @@ COPY --from=admin-build /admin/build ./admin/build
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
-CMD ["uvicorn", "app.server.run:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use shell form so $PORT from Render is respected; fallback to 8000 for local dev
+CMD ["sh", "-c", "uvicorn app.server.run:app --host 0.0.0.0 --port ${PORT:-8000}"]
