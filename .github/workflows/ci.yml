@@ -281,20 +281,18 @@ jobs:
           )
           found=0
           for pat in "${patterns[@]}"; do
-            if git log --all --oneline --grep="$pat" | head -1 | grep -q .; then
-              echo "PATTERN FOUND IN COMMIT MESSAGES: $pat"
-              found=1
-            fi
-            if git log --all -p --grep="$pat" 2>/dev/null | head -5 | grep -q .; then
-              echo "PATTERN FOUND IN DIFFS: $pat"
+            # Check diffs only (actual code changes), not commit messages
+            # Use git log -p to see patches, filter for added lines only (^\+)
+            if git log --all -p 2>/dev/null | grep -E "^\+\s*.*${pat}" | head -1 | grep -q .; then
+              echo "PATTERN FOUND IN ADDED DIFF LINES: $pat"
               found=1
             fi
           done
           if [ $found -eq 1 ]; then
-            echo "SECRET LEAKAGE DETECTED IN GIT HISTORY"
+            echo "SECRET LEAKAGE DETECTED IN GIT HISTORY (added lines)"
             exit 1
           else
-            echo "No secret patterns found in git history"
+            echo "No secret patterns found in git history (added lines)"
           fi
 
       - name: Verify .gitignore covers secrets
