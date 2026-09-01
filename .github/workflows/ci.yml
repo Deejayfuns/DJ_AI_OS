@@ -45,13 +45,18 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
       - name: Install dependencies
         run: |
           pip install -e ".[dev,server]"
           pip install aiosqlite
 
       - name: Run full test suite (SQLite)
-        run: python -m pytest -q --tb=short
+        run: xvfb-run -a python -m pytest -q --tb=short
         env:
           DJ_AI_OS_DATABASE_URL: sqlite+aiosqlite:///./test.db
           DJ_AI_OS_SKIP_STARTUP_VALIDATION: "1"

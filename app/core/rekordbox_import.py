@@ -38,7 +38,11 @@ FILE_URL_RE = re.compile(r"^file://(?:localhost/)?(.*)$", re.IGNORECASE)
 
 
 def file_url_to_path(url):
-    """Convert a Rekordbox file:// URL to a local filesystem path."""
+    """Convert a Rekordbox file:// URL to a local filesystem path.
+
+    Always returns Windows-style paths (with backslashes) when a Windows
+    drive letter is detected, ensuring consistent behavior across platforms.
+    """
     if not url:
         return ""
     m = FILE_URL_RE.match(url.strip())
@@ -50,7 +54,11 @@ def file_url_to_path(url):
     path = unquote(path)
     # normalize windows path: file:///C:/... -> C:/...
     path = re.sub(r"^/([A-Za-z]:)", r"\1", path)
-    return os.path.normpath(path)
+    # Force Windows-style backslashes when drive letter detected for
+    # cross-platform consistency (Rekordbox exports Windows paths)
+    if re.match(r"^[A-Za-z]:", path):
+        path = path.replace("/", "\\")
+    return path
 
 
 def parse_cue_points(cue_text):

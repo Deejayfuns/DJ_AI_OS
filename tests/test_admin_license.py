@@ -59,8 +59,11 @@ def _vendor_private_key() -> bytes:
     return (ROOT / "vendor_private_key.pem").read_bytes()
 
 
-async def _create_customer(session, email="ozer.test@astra.local", name="Özer Test",
+async def _create_customer(session, email=None, name="Özer Test",
                             company="ASTRA Test Co") -> str:
+    if email is None:
+        import uuid
+        email = f"test_{uuid.uuid4().hex[:8]}@astra.local"
     service = AdminService(session)
     from app.server.admin_api import CreateCustomerRequest
     result = await service.create_customer(email=email, name=name, company_name=company)
@@ -73,13 +76,14 @@ async def _create_customer(session, email="ozer.test@astra.local", name="Özer T
 
 async def test_create_customer():
     async with get_db_session() as session:
-        cid = await _create_customer(session)
+        email = "ozer.test@astra.local"
+        cid = await _create_customer(session, email=email)
         assert cid is not None
         # Verify persisted with company_name
         result = await session.execute(select(User).where(User.id == cid))
         user = result.scalar_one_or_none()
         assert user is not None
-        assert user.email == "ozer.test@astra.local"
+        assert user.email == email
         assert user.company_name == "ASTRA Test Co"
         assert user.is_admin is False
         assert user.is_active is True
@@ -113,11 +117,12 @@ async def test_list_customers():
 
 async def test_get_customer_detail():
     async with get_db_session() as session:
-        cid = await _create_customer(session, company="DetailCo")
+        email = "ozer.test@astra.local"
+        cid = await _create_customer(session, email=email, company="DetailCo")
         service = AdminService(session)
         detail = await service.get_customer_detail(cid)
         assert detail["id"] == cid
-        assert detail["email"] == "ozer.test@astra.local"
+        assert detail["email"] == email
         assert detail["company_name"] == "DetailCo"
         assert "created_at" in detail
 
@@ -183,7 +188,8 @@ async def test_issue_license_custom_expiry_and_max_tracks():
 async def test_download_license_returns_signed_payload():
     mid = _machine_id()
     async with get_db_session() as session:
-        cid = await _create_customer(session)
+        email = "ozer.test@astra.local"
+        cid = await _create_customer(session, email=email)
         service = AdminService(session)
         result = await service.issue_license(
             cid, "ENTERPRISE", 12, machine_id=mid, actor="admin"
@@ -194,7 +200,7 @@ async def test_download_license_returns_signed_payload():
         # Verify signature
         assert sig.verify(payload, payload["signature"], public_key_pem=sig.VENDOR_PUBLIC_KEY_PEM.encode())
         # Required fields
-        assert payload["email"] == "ozer.test@astra.local"
+        assert payload["email"] == email
         assert payload["machine_id"] == mid
         assert payload["plan"] == "ENTERPRISE"
         assert "signature" in payload

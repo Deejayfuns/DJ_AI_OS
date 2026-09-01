@@ -55,9 +55,11 @@ def _parse():
 
 
 def test_file_url_conversion():
+    # On any platform, Windows drive-letter paths return backslashes
     assert file_url_to_path("file:///C:/Users/X/Music/x.mp3") == "C:\\Users\\X\\Music\\x.mp3"
     assert file_url_to_path("file:///C:/Music/song%20name.mp3") == "C:\\Music\\song name.mp3"
-    assert file_url_to_path("/plain/path.mp3") == "\\plain\\path.mp3" or True
+    # Non-file URLs or paths without drive letters pass through (normalized)
+    assert file_url_to_path("/plain/path.mp3") == "/plain/path.mp3"
 
 
 def test_parse_collection():
