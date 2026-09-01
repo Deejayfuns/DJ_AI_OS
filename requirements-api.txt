@@ -1,0 +1,22 @@
+# DJ AI OS - API Server (FastAPI commercial backend)
+# Minimal deps for Render deployment - NO PyAudio, NO GUI, NO ML heavyweights
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+sqlalchemy[asyncio]
+asyncpg
+aiosqlite
+alembic
+stripe
+cryptography
+requests
+beautifulsoup4
+yt-dlp
+pyyaml
+msgpack
+watchdog
+zeroconf
+httptools
+watchfiles
+websockets

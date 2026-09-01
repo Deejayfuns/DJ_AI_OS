@@ -16,13 +16,13 @@ FROM python:3.12-slim AS api
 
 WORKDIR /app
 
-# System deps for torch/audio
+# System deps for API (ffmpeg for yt-dlp, libsndfile for audio metadata)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg libsndfile1 portaudio19-dev \
+    ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-api.txt ./
+RUN pip install --no-cache-dir -r requirements-api.txt
 
 COPY app/ ./app/
 COPY tools/ ./tools/
