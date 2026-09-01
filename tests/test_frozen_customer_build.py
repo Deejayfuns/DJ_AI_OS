@@ -25,7 +25,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 FROZEN = os.path.join(ROOT, "dist", "DJ_AI_OS", "_internal")
 if not os.path.isdir(FROZEN):
-    raise SystemExit(f"Frozen tree not found: {FROZEN}")
+    import pytest
+    pytest.skip(f"Frozen tree not found: {FROZEN} (PyInstaller build not run in this CI job)", allow_module_level=True)
 if FROZEN not in sys.path:
     sys.path.insert(0, FROZEN)
 
