@@ -70,8 +70,10 @@ DJ_SONG_VAULT/
 build_log.txt
 build_log2.txt
 nul
-update_manifest.json
-update_manifest_signed.json
+# Update manifest/artifacts for CI tests (allowed — public artifacts, no secrets)
+!update_manifest.json
+!update_manifest_signed.json
+!dist/update_artifacts/
 
 # Signing artifacts
 signing/

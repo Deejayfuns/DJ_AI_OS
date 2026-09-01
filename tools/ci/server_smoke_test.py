@@ -4,6 +4,7 @@ import os
 
 os.environ['DJ_AI_OS_DATABASE_URL'] = 'postgresql+asyncpg://postgres:postgres@localhost:5432/dj_ai_os_test'
 os.environ['DJ_AI_OS_INIT_DB'] = 'true'
+os.environ['DJ_AI_OS_SKIP_STARTUP_VALIDATION'] = '1'
 os.environ['LC_ALL'] = 'C'
 os.environ['LANG'] = 'C'
 

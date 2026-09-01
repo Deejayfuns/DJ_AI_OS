@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "min_client_version": "0.1.0",
+  "released_at": "2026-08-13T00:00:00Z",
+  "critical": false,
+  "changelog": "Production update manifest for V1.0 module update chain",
+  "download_url": "https://api.dj-ai-os.example/api/update",
+  "modules": [
+    {
+      "name": "app/config/version.py",
+      "version": "0.2.0",
+      "sha256": "5a3f85e324e9b0d58d3f6e0545167abcefd5afcec00a93bf5b23a72a6cce7a66",
+      "size": 131,
+      "hot_reload": false
+    },
+    {
+      "name": "app/cloud/update_engine.py",
+      "version": "0.2.0",
+      "sha256": "8987fde0e1e85f08abee80f7ef1e740a48b0c044bc72da87773c730288ef1d83",
+      "size": 24,
+      "hot_reload": false
+    }
+  ],
+  "signature": "d4c2d11e51298770d9591fb608c7f709483e4b939a44e2b8da70c30cdef915c7cb524e014c4b594b115d7849b94da48e8446479555cccaf06dc9b33ea2e8760a"
+}

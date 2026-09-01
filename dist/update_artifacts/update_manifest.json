@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "min_client_version": "0.1.0",
+  "released_at": "2026-08-28T04:51:39.812274Z",
+  "critical": false,
+  "changelog": "Production v0.2.0 -- Song Vault fix + update chain + security",
+  "download_url": "https://api.dj-ai-os.example/api/update",
+  "modules": [
+    {
+      "name": "app/config/version.py",
+      "version": "0.2.0",
+      "sha256": "13d3db28e62661cba7a9586863f63080224d2c6208425a2c9bc447e0c1d9f5d0",
+      "size": 690,
+      "hot_reload": false
+    },
+    {
+      "name": "app/cloud/update_engine.py",
+      "version": "0.2.0",
+      "sha256": "a4eac77d65e7afbd7db5b5a768d06246c58d44eba98469b07aa316765b16fd80",
+      "size": 18185,
+      "hot_reload": false
+    }
+  ],
+  "signature": "7ac42881a241080a2999c56d445c9771df38741e6cd71d157763ceebf251e12b5b05512ff8240d6c997b645e1523a88cb5fde661574ceb4d9d16d0e50b575e0e"
+}
