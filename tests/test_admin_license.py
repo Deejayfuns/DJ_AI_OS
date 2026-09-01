@@ -55,15 +55,39 @@ def _machine_id() -> str:
     return MachineID().generate()
 
 
-def _vendor_private_key() -> bytes:
-    return (ROOT / "vendor_private_key.pem").read_bytes()
+# --- Test keypair fixture (ephemeral, vendor key'e dokunmaz) ---
+def _make_test_keypair():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    priv = Ed25519PrivateKey.generate()
+    private_pem = priv.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+    public_pem = priv.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("utf-8")
+    return private_pem, public_pem
 
 
-async def _create_customer(session, email=None, name="Özer Test",
-                            company="ASTRA Test Co") -> str:
+_TEST_PRIVATE_PEM, _TEST_PUBLIC_PEM = _make_test_keypair()
+
+
+@pytest.fixture(autouse=True)
+def _patch_vendor_keys(monkeypatch: pytest.MonkeyPatch):
+    """Patch vendor keys for admin license tests. Uses ephemeral test keypair."""
+    monkeypatch.setattr(sig, "VENDOR_PUBLIC_KEY_PEM", _TEST_PUBLIC_PEM)
+    # Also set env so has_signing_key() returns True and _load_private_key_pem works
+    monkeypatch.setenv("DJ_AI_OS_LICENSE_PRIVATE_KEY", _TEST_PRIVATE_PEM)
+
+
+async def _create_customer(session, email=None, name="Test Customer",
+                            company="Test Co") -> str:
     if email is None:
         import uuid
-        email = f"test_{uuid.uuid4().hex[:8]}@astra.local"
+        email = f"test_{uuid.uuid4().hex[:8]}@test.local"
     service = AdminService(session)
     from app.server.admin_api import CreateCustomerRequest
     result = await service.create_customer(email=email, name=name, company_name=company)
@@ -76,7 +100,7 @@ async def _create_customer(session, email=None, name="Özer Test",
 
 async def test_create_customer():
     async with get_db_session() as session:
-        email = "ozer.test@astra.local"
+        email = "test.customer@test.local"
         cid = await _create_customer(session, email=email)
         assert cid is not None
         # Verify persisted with company_name
@@ -84,16 +108,16 @@ async def test_create_customer():
         user = result.scalar_one_or_none()
         assert user is not None
         assert user.email == email
-        assert user.company_name == "ASTRA Test Co"
+        assert user.company_name == "Test Co"
         assert user.is_admin is False
         assert user.is_active is True
 
 
 async def test_create_customer_duplicate_email_fails():
     async with get_db_session() as session:
-        await _create_customer(session, email="dup@astra.local")
+        await _create_customer(session, email="dup@test.local")
         with pytest.raises(Exception):
-            await _create_customer(session, email="dup@astra.local")
+            await _create_customer(session, email="dup@test.local")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -102,13 +126,13 @@ async def test_create_customer_duplicate_email_fails():
 
 async def test_list_customers():
     async with get_db_session() as session:
-        await _create_customer(session, email="c1@astra.local", name="C1")
-        await _create_customer(session, email="c2@astra.local", name="C2")
+        await _create_customer(session, email="c1@test.local", name="C1")
+        await _create_customer(session, email="c2@test.local", name="C2")
         service = AdminService(session)
         customers = await service.list_customers()
         emails = [c["email"] for c in customers]
-        assert "c1@astra.local" in emails
-        assert "c2@astra.local" in emails
+        assert "c1@test.local" in emails
+        assert "c2@test.local" in emails
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -117,7 +141,7 @@ async def test_list_customers():
 
 async def test_get_customer_detail():
     async with get_db_session() as session:
-        email = "ozer.test@astra.local"
+        email = "test.customer@test.local"
         cid = await _create_customer(session, email=email, company="DetailCo")
         service = AdminService(session)
         detail = await service.get_customer_detail(cid)
@@ -188,7 +212,7 @@ async def test_issue_license_custom_expiry_and_max_tracks():
 async def test_download_license_returns_signed_payload():
     mid = _machine_id()
     async with get_db_session() as session:
-        email = "ozer.test@astra.local"
+        email = "test.customer@test.local"
         cid = await _create_customer(session, email=email)
         service = AdminService(session)
         result = await service.issue_license(
