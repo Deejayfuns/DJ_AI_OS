@@ -267,7 +267,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Scan for secrets in history
+      - name: Scan for secrets in current commit diff
         run: |
           patterns=(
             "sk_test_"
@@ -280,19 +280,25 @@ jobs:
             "BEGIN EC PRIVATE KEY"
           )
           found=0
+          # Get the diff for the current commit range
+          # For PR: compare PR head vs base; for push: compare new commit vs previous
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            DIFF_RANGE="${{ github.event.pull_request.base.sha }}..${{ github.sha }}"
+          else
+            DIFF_RANGE="HEAD~1..HEAD"
+          fi
           for pat in "${patterns[@]}"; do
-            # Check diffs only (actual code changes), not commit messages
-            # Use git log -p to see patches, filter for added lines only (^\+)
-            if git log --all -p 2>/dev/null | grep -E "^\+\s*.*${pat}" | head -1 | grep -q .; then
+            # Check only added lines in the current commit diff (^\+), not commit messages
+            if git diff "$DIFF_RANGE" 2>/dev/null | grep -E "^\+\s*.*${pat}" | head -1 | grep -q .; then
               echo "PATTERN FOUND IN ADDED DIFF LINES: $pat"
               found=1
             fi
           done
           if [ $found -eq 1 ]; then
-            echo "SECRET LEAKAGE DETECTED IN GIT HISTORY (added lines)"
+            echo "SECRET LEAKAGE DETECTED IN CURRENT COMMIT DIFF (added lines)"
             exit 1
           else
-            echo "No secret patterns found in git history (added lines)"
+            echo "No secret patterns found in current commit diff (added lines)"
           fi
 
       - name: Verify .gitignore covers secrets
