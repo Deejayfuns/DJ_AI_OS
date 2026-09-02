@@ -20,9 +20,6 @@ class StartupValidationError(Exception):
 REQUIRED_PRODUCTION_VARS: List[Tuple[str, str, bool]] = [
     # Database
     ("DJ_AI_OS_DATABASE_URL", "PostgreSQL connection string (prod)", True),
-    # Stripe
-    ("STRIPE_SECRET_KEY", "Stripe secret key (sk_live_...)", True),
-    ("STRIPE_WEBHOOK_SECRET", "Stripe webhook signing secret (whsec_...)", True),
     # Admin Auth
     ("ADMIN_TOKEN", "Admin API bearer token (64-char hex)", True),
     # License Signing (vendor machine)
@@ -31,6 +28,14 @@ REQUIRED_PRODUCTION_VARS: List[Tuple[str, str, bool]] = [
     ("DJ_AI_OS_UPDATE_BASE_URL", "Base URL for signed update manifest + artifacts", False),
     # Client-facing API
     ("DJ_AI_OS_API_URL", "Public HTTPS API endpoint for desktop clients", False),
+]
+
+# ─── Optional Paired Feature: Stripe Payments ───
+# Both must be present together, or both absent.
+# If absent: Stripe payments disabled, server starts without billing.
+STRIPE_VARS: List[Tuple[str, str, bool]] = [
+    ("STRIPE_SECRET_KEY", "Stripe secret key (sk_live_...)", True),
+    ("STRIPE_WEBHOOK_SECRET", "Stripe webhook signing secret (whsec_...)", True),
 ]
 
 # Optional but recommended
@@ -72,14 +77,6 @@ def validate_production_env(skip_optional: bool = False) -> List[str]:
             if not value.startswith(("postgresql+asyncpg://", "postgresql://")):
                 invalid.append(f"  {var_name}: must be postgresql+asyncpg:// (got: {value[:30]}...)")
 
-        elif var_name == "STRIPE_SECRET_KEY":
-            if not value.startswith(("sk_live_", "sk_test_")):
-                invalid.append(f"  {var_name}: must start with sk_live_ or sk_test_")
-
-        elif var_name == "STRIPE_WEBHOOK_SECRET":
-            if not value.startswith("whsec_"):
-                invalid.append(f"  {var_name}: must start with whsec_")
-
         elif var_name == "ADMIN_TOKEN":
             # Must be 64 hex chars (32 bytes)
             if len(value) != 64 or not all(c in "0123456789abcdefABCDEF" for c in value):
@@ -92,6 +89,26 @@ def validate_production_env(skip_optional: bool = False) -> List[str]:
         elif var_name in ("DJ_AI_OS_UPDATE_BASE_URL", "DJ_AI_OS_API_URL"):
             if not value.startswith("https://"):
                 invalid.append(f"  {var_name}: must be HTTPS URL (production requires TLS)")
+
+    # Check Stripe paired feature: both must be present, or both absent
+    stripe_secret = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+    stripe_webhook = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+
+    stripe_present = bool(stripe_secret) or bool(stripe_webhook)
+    if stripe_present:
+        # If only one is present, that's an error
+        if not stripe_secret:
+            invalid.append("  STRIPE_SECRET_KEY: required when STRIPE_WEBHOOK_SECRET is set")
+        if not stripe_webhook:
+            invalid.append("  STRIPE_WEBHOOK_SECRET: required when STRIPE_SECRET_KEY is set")
+        # Validate formats if both present
+        if stripe_secret and not stripe_secret.startswith(("sk_live_", "sk_test_")):
+            invalid.append("  STRIPE_SECRET_KEY: must start with sk_live_ or sk_test_")
+        if stripe_webhook and not stripe_webhook.startswith("whsec_"):
+            invalid.append("  STRIPE_WEBHOOK_SECRET: must start with whsec_")
+    else:
+        # Neither present - Stripe disabled, log warning
+        warnings.append("  Stripe payments disabled - Stripe credentials not configured")
 
     if missing:
         raise StartupValidationError(
