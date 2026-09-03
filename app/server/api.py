@@ -8,6 +8,7 @@ Main entry: app.server.run:app
 """
 
 import os
+from contextlib import asynccontextmanager
 from typing import Optional
 
 import uvicorn
@@ -18,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.cloud.beatport_client import BeatportClient
+from app.server.db.connection import init_db
 from app.server.admin_api import router as admin_router, auth_router as admin_auth_router
 from app.server.billing_service import BillingService
 from app.server.cloud_service import CloudService
@@ -62,6 +64,23 @@ class CustomerPortalRequest(BaseModel):
 
 # ─── App ───
 
+@asynccontextmanager
+async def _bootstrap_lifespan(app: FastAPI):
+    """
+    Bootstrap the schema at startup (idempotent).
+
+    ``init_db()`` runs ``Base.metadata.create_all`` with checkfirst=True, which
+    only creates tables that do not yet exist. This is a safe safety net on top
+    of Alembic (the production migration path): if the migrations were applied,
+    this is a no-op; if they were not (fresh/empty production DB), it creates the
+    complete current schema so DB-backed routes (/api/activate, /api/checkout)
+    never hit a missing-table 500. Gated by DJ_AI_OS_INIT_DB (default true).
+    """
+    if os.environ.get("DJ_AI_OS_INIT_DB", "true").lower() != "false":
+        await init_db()
+    yield
+
+
 def create_app() -> FastAPI:
     """Create and configure FastAPI application."""
 
@@ -69,6 +88,7 @@ def create_app() -> FastAPI:
         title="DJ AI OS Commercial API",
         version="0.1.0",
         description="License activation, billing, cloud, and admin API for DJ AI OS.",
+        lifespan=_bootstrap_lifespan,
     )
 
     # Rate limiting (abuse protection) — placed before CORS

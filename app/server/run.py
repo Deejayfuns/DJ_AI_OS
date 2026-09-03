@@ -12,19 +12,14 @@ import sys
 from app.server.startup_validation import run_startup_validation
 
 from app.server.api import create_app
-from app.server.db.connection import init_db
 
 
 # Run production validation FIRST - fail fast if critical config missing
 run_startup_validation()
 
 
-# Initialize DB tables (dev only — prod uses Alembic)
-async def _init_on_startup():
-    if os.environ.get("DJ_AI_OS_INIT_DB", "true").lower() != "false":
-        await init_db()
-
-
+# Schema bootstrap (idempotent create_all) is wired into the FastAPI lifespan
+# inside create_app() — see _bootstrap_lifespan in app/server/api.py.
 app = create_app()
 
 
